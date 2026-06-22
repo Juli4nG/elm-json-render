@@ -40,7 +40,18 @@ export function normalizeElement(el, depth = 0) {
     }
     if (el.hasAttribute(name)) {
       let value = el.getAttribute(name);
-      if (name === "class") value = value.trim().split(/\s+/).sort().join(" ");
+      if (name === "class") {
+        // Keep ONLY the pinned `jr-*` namespace; drop framework/host-specific class
+        // tokens (Solid wrappers, design-system layers) so the two tracks' goldens
+        // diff on renderer semantics, not framework noise. Omit `class` if none remain.
+        value = value
+          .trim()
+          .split(/\s+/)
+          .filter((token) => token.startsWith("jr-"))
+          .sort()
+          .join(" ");
+        if (!value) continue;
+      }
       attrs.push(`${name}="${value}"`);
     }
   }
