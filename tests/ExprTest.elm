@@ -116,6 +116,11 @@ suite =
                     Decode.decodeString Expr.decoder "{\"$index\":false}"
                         |> isErr
                         |> Expect.equal True
+            , test "a directive with an extra non-$ sibling fails (no silent drop)" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$item\":\"id\",\"kind\":\"instance\"}"
+                        |> isErr
+                        |> Expect.equal True
             ]
         , describe "resolve"
             [ test "$state reads global state" <|

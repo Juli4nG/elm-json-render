@@ -84,8 +84,27 @@ suite =
                     JsonRender.decodeString paramsWithMalformedItem
                         |> isErr
                         |> Expect.equal True
+            , test "a directive object with an extra sibling in params fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString paramsWithDirectiveSibling
+                        |> isErr
+                        |> Expect.equal True
             ]
         ]
+
+
+paramsWithDirectiveSibling : String
+paramsWithDirectiveSibling =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": { "action": "go", "params": { "target": { "$item": "id", "kind": "instance" } } } }
+            }
+        }
+    }
+    """
 
 
 elementWithVisible : String

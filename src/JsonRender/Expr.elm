@@ -103,7 +103,19 @@ classify value =
                     Decode.succeed (ELiteral value)
 
                 [ ( key, _ ) ] ->
-                    dispatch key value
+                    if List.length pairs == 1 then
+                        dispatch key value
+
+                    else
+                        -- A directive object must be the directive ALONE. Extra siblings
+                        -- (e.g. `{ "$item": "id", "kind": "x" }`) would be silently dropped
+                        -- at resolution, corrupting the emitted payload — fail-closed.
+                        Decode.fail
+                            ("directive `"
+                                ++ key
+                                ++ "` must be the only key, but the object also carries: "
+                                ++ String.join ", " (siblingKeys key pairs)
+                            )
 
                 multiple ->
                     Decode.fail
@@ -114,6 +126,11 @@ classify value =
         Err _ ->
             -- Not an object: scalar / array / null are all literals.
             Decode.succeed (ELiteral value)
+
+
+siblingKeys : String -> List ( String, Value ) -> List String
+siblingKeys directive pairs =
+    pairs |> List.map Tuple.first |> List.filter (\k -> k /= directive)
 
 
 dispatch : String -> Value -> Decoder Expr
