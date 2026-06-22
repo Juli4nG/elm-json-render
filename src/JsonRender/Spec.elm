@@ -319,28 +319,40 @@ allowedElementKeys =
 
 elementDecoder : Decoder UIElement
 elementDecoder =
+    rejectUnknownKeys "element" allowedElementKeys elementBodyDecoder
+
+
+{-| Run `inner` only if the object's keys are all in `allowed`; otherwise fail-closed.
+This is the strictness floor reused for elements, props, action bindings, and confirm —
+Elm decoders ignore unknown keys by default, which would silently drop unsupported
+contract surface (`visible`, `onSuccess`, a future `disabled` prop, …).
+-}
+rejectUnknownKeys : String -> List String -> Decoder a -> Decoder a
+rejectUnknownKeys label allowed inner =
     Decode.value
         |> Decode.andThen
             (\value ->
-                case unsupportedElementKeys value of
+                case unknownKeys allowed value of
                     [] ->
-                        decodeFromValue elementBodyDecoder value
+                        decodeFromValue inner value
 
                     extra ->
                         Decode.fail
-                            ("Unsupported element key(s) (fail-closed; not implemented): "
+                            ("Unsupported "
+                                ++ label
+                                ++ " key(s) (fail-closed; not implemented): "
                                 ++ String.join ", " extra
                             )
             )
 
 
-unsupportedElementKeys : Value -> List String
-unsupportedElementKeys value =
+unknownKeys : List String -> Value -> List String
+unknownKeys allowed value =
     case Decode.decodeValue (Decode.keyValuePairs Decode.value) value of
         Ok pairs ->
             pairs
                 |> List.map Tuple.first
-                |> List.filter (\key -> not (List.member key allowedElementKeys))
+                |> List.filter (\key -> not (List.member key allowed))
 
         Err _ ->
             []
@@ -394,16 +406,55 @@ parseComponentType name =
 
 {-| Decode the strict per-component props. `props` is decoded against an empty object
 when absent, so the strict body decoder still runs (and still fails-closed when a
-required field like `Text.value` is missing).
+required field like `Text.value` is missing). Unknown prop keys are **rejected** per
+component (a stray `disabled` on a Button must fail, not render an enabled button).
 -}
 propsDecoder : ComponentType -> Decoder Props
 propsDecoder ct =
     Decode.maybe (Decode.field "props" Decode.value)
         |> Decode.andThen
             (\maybeProps ->
-                decodeFromValue (propsBodyDecoder ct)
-                    (Maybe.withDefault (Encode.object []) maybeProps)
+                let
+                    props =
+                        Maybe.withDefault (Encode.object []) maybeProps
+                in
+                case unknownKeys (allowedPropKeys ct) props of
+                    [] ->
+                        decodeFromValue (propsBodyDecoder ct) props
+
+                    extra ->
+                        Decode.fail
+                            ("Unsupported "
+                                ++ componentType ct
+                                ++ " prop(s) (fail-closed): "
+                                ++ String.join ", " extra
+                            )
             )
+
+
+allowedPropKeys : ComponentType -> List String
+allowedPropKeys ct =
+    case ct of
+        Card ->
+            [ "title" ]
+
+        Stack ->
+            [ "direction", "gap" ]
+
+        Text ->
+            [ "value" ]
+
+        Badge ->
+            [ "value" ]
+
+        Button ->
+            [ "label" ]
+
+        Checkbox ->
+            [ "label", "checked" ]
+
+        FindingsTable ->
+            [ "bind", "groupBy" ]
 
 
 decodeFromValue : Decoder a -> Value -> Decoder a
@@ -470,35 +521,62 @@ directionDecoder =
 
 repeatDecoder : Decoder Repeat
 repeatDecoder =
-    Decode.map2 Repeat
-        (Decode.field "statePath" Decode.string)
-        (Decode.maybe (Decode.field "key" Decode.string))
+    rejectUnknownKeys "repeat"
+        [ "statePath", "key" ]
+        (Decode.map2 Repeat
+            (Decode.field "statePath" Decode.string)
+            (Decode.maybe (Decode.field "key" Decode.string))
+        )
 
 
+{-| An event's bindings: a single `ActionBinding` object, or an array of **exactly one**.
+json-render allows `ActionBinding[]`, but multi-action dispatch is not yet implemented,
+so an array of length ≠ 1 is **rejected** rather than silently truncated to the first.
+-}
 actionBindingsDecoder : Decoder (List ActionBinding)
 actionBindingsDecoder =
     Decode.oneOf
-        [ Decode.list actionBindingDecoder
+        [ Decode.list actionBindingDecoder |> Decode.andThen requireSingleBinding
         , Decode.map List.singleton actionBindingDecoder
         ]
 
 
+requireSingleBinding : List ActionBinding -> Decoder (List ActionBinding)
+requireSingleBinding bindings =
+    case bindings of
+        [ single ] ->
+            Decode.succeed [ single ]
+
+        _ ->
+            Decode.fail
+                ("multiple action bindings per event are not yet supported (got "
+                    ++ String.fromInt (List.length bindings)
+                    ++ "); split them or use a single binding"
+                )
+
+
 actionBindingDecoder : Decoder ActionBinding
 actionBindingDecoder =
-    Decode.map3 ActionBinding
-        (Decode.field "action" Decode.string)
-        (optionalField "params" Expr.validatedParams (Encode.object []))
-        (Decode.maybe (Decode.field "confirm" confirmDecoder))
+    rejectUnknownKeys "action binding"
+        [ "action", "params", "confirm" ]
+        (Decode.map3 ActionBinding
+            (Decode.field "action" Decode.string)
+            (optionalField "params" Expr.validatedParams (Encode.object []))
+            (Decode.maybe (Decode.field "confirm" confirmDecoder))
+        )
 
 
 confirmDecoder : Decoder Confirm
 confirmDecoder =
-    Decode.map5 Confirm
-        (Decode.field "title" Expr.decoder)
-        (Decode.field "message" Expr.decoder)
-        (Decode.maybe (Decode.field "confirmLabel" Decode.string))
-        (Decode.maybe (Decode.field "cancelLabel" Decode.string))
-        (optionalField "variant" Decode.string "default")
+    rejectUnknownKeys "confirm"
+        [ "title", "message", "confirmLabel", "cancelLabel", "variant" ]
+        (Decode.map5 Confirm
+            (Decode.field "title" Expr.decoder)
+            (Decode.field "message" Expr.decoder)
+            (Decode.maybe (Decode.field "confirmLabel" Decode.string))
+            (Decode.maybe (Decode.field "cancelLabel" Decode.string))
+            (optionalField "variant" Decode.string "default")
+        )
 
 
 

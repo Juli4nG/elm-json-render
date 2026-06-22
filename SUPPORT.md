@@ -49,13 +49,25 @@ is fail-open here (warns + renders `null`); we are not.
 
 - `on.press` → an `Effect` (`EmitAction { verb, params }`) the host applies. The renderer
   never executes the verb (no URL/`navigate`/`fetch` is ever wired, per the trust model).
+- An `ActionBinding` accepts **only** `action`, `params`, `confirm`. Unsupported fields
+  (`onSuccess`, `onError`, `preventDefault`) are **rejected at decode**, not silently
+  dropped — declared follow-up/error behavior must fail closed, not vanish.
 - `confirm` is honored by the renderer (it owns the dialog) and only emits on accept.
-- **Only the first binding of an event is wired.** json-render allows `on.press` to be an
-  `ActionBinding[]`; the card uses exactly one. Multiple-binding-per-event is **not yet
-  supported** (the decoder accepts the array but the renderer dispatches `List.head`).
+  Confirm accepts only `title`/`message`/`confirmLabel`/`cancelLabel`/`variant`.
+- **Multiple bindings per event are rejected at decode.** json-render allows `on.press`
+  to be an `ActionBinding[]`; the card uses exactly one. An array of length ≠ 1 fails the
+  decode (a single-element array is accepted) rather than silently truncating to the first.
 - Built-in runtime verbs (`setState`/`pushState`/`removeState`/`push`/`pop`/`validateForm`)
   are **not** implemented as renderer built-ins — every verb surfaces to the host, which
   owns all state writes. Checkbox two-way writes surface as `EmitStateChange`.
+
+## Strictness summary (fail-closed key allowlists)
+
+Elm decoders ignore unknown object keys by default; this renderer rejects them instead,
+so unsupported contract surface fails closed rather than rendering with silently-dropped
+semantics. Enforced via `rejectUnknownKeys` on: **element** (`type`/`props`/`children`/
+`on`/`repeat`), **props** (per-component allowlist — e.g. a stray `disabled` on a Button
+fails), **action binding** (`action`/`params`/`confirm`), **confirm**, and **repeat**.
 
 ## Deviations from the contract / stock json-render
 

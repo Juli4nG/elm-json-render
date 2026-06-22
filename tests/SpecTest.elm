@@ -89,8 +89,80 @@ suite =
                     JsonRender.decodeString paramsWithDirectiveSibling
                         |> isErr
                         |> Expect.equal True
+            , test "an unknown per-component prop key fails the decode (strict props)" <|
+                \_ ->
+                    JsonRender.decodeString buttonWithUnknownProp
+                        |> isErr
+                        |> Expect.equal True
+            , test "an unsupported ActionBinding field (onSuccess) fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString bindingWithOnSuccess
+                        |> isErr
+                        |> Expect.equal True
+            , test "a multi-binding event array fails the decode (no silent truncation)" <|
+                \_ ->
+                    JsonRender.decodeString multiBindingEvent
+                        |> isErr
+                        |> Expect.equal True
+            , test "a single-element binding array still decodes" <|
+                \_ ->
+                    JsonRender.decodeString singleBindingArray
+                        |> isErr
+                        |> Expect.equal False
             ]
         ]
+
+
+buttonWithUnknownProp : String
+buttonWithUnknownProp =
+    """
+    { "root": "r"
+    , "elements":
+        { "r": { "type": "Button", "props": { "label": "x", "disabled": true }, "children": [] } }
+    }
+    """
+
+
+bindingWithOnSuccess : String
+bindingWithOnSuccess =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": { "action": "go", "onSuccess": { "navigate": "/elsewhere" } } }
+            }
+        }
+    }
+    """
+
+
+multiBindingEvent : String
+multiBindingEvent =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": [ { "action": "a" }, { "action": "b" } ] }
+            }
+        }
+    }
+    """
+
+
+singleBindingArray : String
+singleBindingArray =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": [ { "action": "a" } ] }
+            }
+        }
+    }
+    """
 
 
 paramsWithDirectiveSibling : String
