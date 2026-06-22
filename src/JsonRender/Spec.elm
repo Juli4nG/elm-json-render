@@ -322,40 +322,34 @@ elementDecoder =
     rejectUnknownKeys "element" allowedElementKeys elementBodyDecoder
 
 
-{-| Run `inner` only if the object's keys are all in `allowed`; otherwise fail-closed.
-This is the strictness floor reused for elements, props, action bindings, and confirm —
-Elm decoders ignore unknown keys by default, which would silently drop unsupported
-contract surface (`visible`, `onSuccess`, a future `disabled` prop, …).
+{-| Run `inner` only if `value` is a JSON object whose keys are all in `allowed`;
+otherwise fail-closed. The strictness floor reused for elements, props, action bindings,
+confirm, and repeat — Elm decoders ignore unknown keys (and silently default on
+non-objects) by default, which would drop unsupported contract surface (`visible`,
+`onSuccess`, a future `disabled` prop) or accept a malformed `"props": []`.
 -}
 rejectUnknownKeys : String -> List String -> Decoder a -> Decoder a
 rejectUnknownKeys label allowed inner =
     Decode.value
         |> Decode.andThen
             (\value ->
-                case unknownKeys allowed value of
-                    [] ->
-                        decodeFromValue inner value
+                case Decode.decodeValue (Decode.keyValuePairs Decode.value) value of
+                    Ok pairs ->
+                        case List.filter (\( key, _ ) -> not (List.member key allowed)) pairs of
+                            [] ->
+                                decodeFromValue inner value
 
-                    extra ->
-                        Decode.fail
-                            ("Unsupported "
-                                ++ label
-                                ++ " key(s) (fail-closed; not implemented): "
-                                ++ String.join ", " extra
-                            )
+                            extra ->
+                                Decode.fail
+                                    ("Unsupported "
+                                        ++ label
+                                        ++ " key(s) (fail-closed; not implemented): "
+                                        ++ String.join ", " (List.map Tuple.first extra)
+                                    )
+
+                    Err _ ->
+                        Decode.fail ("`" ++ label ++ "` must be a JSON object")
             )
-
-
-unknownKeys : List String -> Value -> List String
-unknownKeys allowed value =
-    case Decode.decodeValue (Decode.keyValuePairs Decode.value) value of
-        Ok pairs ->
-            pairs
-                |> List.map Tuple.first
-                |> List.filter (\key -> not (List.member key allowed))
-
-        Err _ ->
-            []
 
 
 elementBodyDecoder : Decoder UIElement
@@ -414,20 +408,15 @@ propsDecoder ct =
     Decode.maybe (Decode.field "props" Decode.value)
         |> Decode.andThen
             (\maybeProps ->
-                let
-                    props =
-                        Maybe.withDefault (Encode.object []) maybeProps
-                in
-                case unknownKeys (allowedPropKeys ct) props of
-                    [] ->
-                        decodeFromValue (propsBodyDecoder ct) props
+                case maybeProps of
+                    Nothing ->
+                        decodeFromValue (propsBodyDecoder ct) (Encode.object [])
 
-                    extra ->
-                        Decode.fail
-                            ("Unsupported "
-                                ++ componentType ct
-                                ++ " prop(s) (fail-closed): "
-                                ++ String.join ", " extra
+                    Just _ ->
+                        Decode.field "props"
+                            (rejectUnknownKeys (componentType ct ++ " prop")
+                                (allowedPropKeys ct)
+                                (propsBodyDecoder ct)
                             )
             )
 

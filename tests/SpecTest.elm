@@ -109,8 +109,36 @@ suite =
                     JsonRender.decodeString singleBindingArray
                         |> isErr
                         |> Expect.equal False
+            , test "non-object props on an all-optional component (Card) fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString cardWithNonObjectProps
+                        |> isErr
+                        |> Expect.equal True
+            , test "array props on a Checkbox fails (does not silently drop the binding)" <|
+                \_ ->
+                    JsonRender.decodeString checkboxWithArrayProps
+                        |> isErr
+                        |> Expect.equal True
             ]
         ]
+
+
+cardWithNonObjectProps : String
+cardWithNonObjectProps =
+    """
+    { "root": "r"
+    , "elements": { "r": { "type": "Card", "props": true, "children": [] } }
+    }
+    """
+
+
+checkboxWithArrayProps : String
+checkboxWithArrayProps =
+    """
+    { "root": "r"
+    , "elements": { "r": { "type": "Checkbox", "props": [], "children": [] } }
+    }
+    """
 
 
 buttonWithUnknownProp : String
