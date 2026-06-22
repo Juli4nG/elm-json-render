@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>elm-json-render — CloudShield card demo</title>
+    <style>
+      :root {
+        --fg: #1c2333;
+        --muted: #5b6b82;
+        --border: #d8dee9;
+        --bg: #f7f8fa;
+      }
+      body {
+        margin: 0;
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+        padding: 2rem;
+      }
+      .demo {
+        max-width: 640px;
+        margin: 0 auto;
+      }
+      .jr-card {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.25rem 1.5rem;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      }
+      .jr-card__title {
+        margin: 0 0 1rem;
+        font-size: 1.05rem;
+      }
+      .jr-stack {
+        display: flex;
+      }
+      .jr-stack--row {
+        flex-direction: row;
+        align-items: center;
+      }
+      .jr-stack--col {
+        flex-direction: column;
+      }
+      .jr-stack[data-gap="1"] {
+        gap: 0.5rem;
+      }
+      .jr-stack[data-gap="2"] {
+        gap: 1rem;
+      }
+      .jr-stack--col > .jr-stack--row {
+        padding: 0.5rem 0;
+        border-top: 1px solid var(--border);
+      }
+      .jr-text {
+        flex: 1;
+      }
+      .jr-checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .jr-badge {
+        display: inline-block;
+        min-width: 64px;
+        text-align: center;
+        padding: 0.1rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: capitalize;
+      }
+      .jr-badge--neutral {
+        background: #eceff4;
+        color: #4c566a;
+      }
+      .jr-badge--info {
+        background: #e5efff;
+        color: #2f6fed;
+      }
+      .jr-badge--success {
+        background: #e3f6e9;
+        color: #1f8f4e;
+      }
+      .jr-badge--danger {
+        background: #fdecec;
+        color: #d23a3a;
+      }
+      .jr-button {
+        border: 1px solid var(--border);
+        background: #fff;
+        border-radius: 7px;
+        padding: 0.3rem 0.7rem;
+        cursor: pointer;
+        font: inherit;
+      }
+      .jr-button:hover {
+        background: #f0f2f5;
+      }
+      .jr-findings--empty {
+        margin-top: 1rem;
+        color: #8a93a6;
+        font-style: italic;
+      }
+      .jr-confirm {
+        position: fixed;
+        inset: 0;
+        background: rgba(20, 24, 35, 0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .jr-confirm__box {
+        background: #fff;
+        border-radius: 10px;
+        padding: 1.25rem 1.5rem;
+        max-width: 380px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+      }
+      .jr-confirm__title {
+        margin: 0 0 0.5rem;
+      }
+      .jr-confirm__actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+      .jr-confirm--danger .jr-confirm__confirm {
+        color: #d23a3a;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="app.js"></script>
+    <script>
+      // The host owns state; here we just pick a scenario from the URL so the
+      // Playwright conformance capture is deterministic (?scenario=final).
+      var params = new URLSearchParams(window.location.search);
+      var scenario = params.get("scenario") === "final" ? "final" : "live";
+      Elm.Main.init({
+        node: document.getElementById("app"),
+        flags: { scenario: scenario },
+      });
+    </script>
+  </body>
+</html>

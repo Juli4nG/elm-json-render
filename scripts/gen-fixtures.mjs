@@ -7,6 +7,7 @@
 // JSON is embedded as triple-quoted string constants. (Neither contract file contains a
 // `"""` sequence, so triple-quoting is safe.)
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,7 +51,19 @@ instancesJson =
     """${instancesJson}"""
 `;
 
-for (const target of ["tests/Fixtures.elm", "demo/src/Fixtures.elm"]) {
+const targets = ["tests/Fixtures.elm", "demo/src/Fixtures.elm"];
+for (const target of targets) {
   writeFileSync(join(root, target), module);
   console.log(`wrote ${target}`);
+}
+
+// Keep generated sources elm-format-clean so the whole tree validates uniformly.
+try {
+  execFileSync(
+    "elm-format",
+    ["--yes", ...targets.map((t) => join(root, t))],
+    { stdio: "ignore" }
+  );
+} catch {
+  console.warn("note: elm-format not found; generated Fixtures left unformatted");
 }

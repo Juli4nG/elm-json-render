@@ -2,3 +2,6 @@ elm-stuff/
 *.log
 .DS_Store
 .env
+node_modules/
+# Build artifact (regenerable via conformance `npm run build-demo`).
+demo/app.js
