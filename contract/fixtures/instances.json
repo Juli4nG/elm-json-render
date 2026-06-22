@@ -1,0 +1,6 @@
+[
+  { "id": "i-0a1b2c3d", "name": "web-frontend-01", "status": "ACTIVE" },
+  { "id": "i-1b2c3d4e", "name": "api-backend-02", "status": "ACTIVE" },
+  { "id": "i-2c3d4e5f", "name": "postgres-primary", "status": "ACTIVE" },
+  { "id": "i-3d4e5f6a", "name": "batch-worker-07", "status": "ACTIVE" }
+]
