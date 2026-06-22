@@ -10,6 +10,7 @@ module JsonRender.Expr exposing
     , resolveBool
     , writeBackPath
     , resolveParams
+    , validatedParams
     )
 
 {-| The json-render expression / binding dialect, scoped to the CloudShield card's
@@ -50,6 +51,7 @@ not. The supported set is exactly what the card uses.
 @docs resolveBool
 @docs writeBackPath
 @docs resolveParams
+@docs validatedParams
 
 -}
 
@@ -347,7 +349,15 @@ writeBackPath ctx expr =
             Just ptr
 
         EBindItem field ->
-            ctx.basePath |> Maybe.map (\base -> base ++ "/" ++ field)
+            ctx.basePath
+                |> Maybe.map
+                    (\base ->
+                        if field == "" then
+                            base
+
+                        else
+                            base ++ "/" ++ field
+                    )
 
         _ ->
             Nothing
@@ -429,6 +439,62 @@ placeholderValue ctx inner =
 -- ACTION PARAMS
 
 
+{-| A `Decoder` for an action's `params` that **validates fail-closed at decode time**:
+it returns the params `Value` unchanged, but fails if any nested object carrying a
+`$`-directive is not a supported, well-formed [`Expr`](#Expr) (e.g. an unsupported
+`$cond`, or a malformed `{ "$item": 123 }`). This closes the gap where params are stored
+raw and only resolved at dispatch — a bad directive is rejected with the rest of the
+manifest, never emitted to the host.
+-}
+validatedParams : Decoder Value
+validatedParams =
+    Decode.value
+        |> Decode.andThen
+            (\value ->
+                case checkParam value of
+                    Ok () ->
+                        Decode.succeed value
+
+                    Err message ->
+                        Decode.fail message
+            )
+
+
+checkParam : Value -> Result String ()
+checkParam value =
+    case Decode.decodeValue (Decode.keyValuePairs Decode.value) value of
+        Ok pairs ->
+            if List.any (Tuple.first >> String.startsWith "$") pairs then
+                case Decode.decodeValue decoder value of
+                    Ok _ ->
+                        Ok ()
+
+                    Err err ->
+                        Err ("invalid directive in action params: " ++ Decode.errorToString err)
+
+            else
+                checkAll (List.map Tuple.second pairs)
+
+        Err _ ->
+            case Decode.decodeValue (Decode.list Decode.value) value of
+                Ok items ->
+                    checkAll items
+
+                Err _ ->
+                    -- A scalar (string / number / bool / null) is always a valid param.
+                    Ok ()
+
+
+checkAll : List Value -> Result String ()
+checkAll values =
+    case values of
+        [] ->
+            Ok ()
+
+        first :: rest ->
+            checkParam first |> Result.andThen (\() -> checkAll rest)
+
+
 {-| Resolve an action's `params` object per the pinned `resolveActionParam` semantics
 (`pinned-format-reference.md` §5.1):
 
@@ -491,7 +557,9 @@ resolveDeep ctx value =
                         resolve ctx expr
 
                     Err _ ->
-                        value
+                        -- Unreachable for validated params (see validatedParams); emit
+                        -- null rather than leak a raw directive object to the host.
+                        Encode.null
 
             else
                 Encode.object (List.map (\( k, v ) -> ( k, resolveDeep ctx v )) pairs)

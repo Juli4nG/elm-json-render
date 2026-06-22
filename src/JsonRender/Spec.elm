@@ -307,8 +307,47 @@ elementStructuralErrors elements ( id, element ) =
     danglingChildren ++ repeatWithoutChildren
 
 
+{-| The element-level keys this renderer handles. Any other sibling of `type` (notably
+json-render's `visible` / `watch`) is **rejected**, not silently ignored — otherwise a
+manifest relying on `visible` to hide a sensitive control would render it unconditionally
+here, breaking the fail-closed boundary.
+-}
+allowedElementKeys : List String
+allowedElementKeys =
+    [ "type", "props", "children", "on", "repeat" ]
+
+
 elementDecoder : Decoder UIElement
 elementDecoder =
+    Decode.value
+        |> Decode.andThen
+            (\value ->
+                case unsupportedElementKeys value of
+                    [] ->
+                        decodeFromValue elementBodyDecoder value
+
+                    extra ->
+                        Decode.fail
+                            ("Unsupported element key(s) (fail-closed; not implemented): "
+                                ++ String.join ", " extra
+                            )
+            )
+
+
+unsupportedElementKeys : Value -> List String
+unsupportedElementKeys value =
+    case Decode.decodeValue (Decode.keyValuePairs Decode.value) value of
+        Ok pairs ->
+            pairs
+                |> List.map Tuple.first
+                |> List.filter (\key -> not (List.member key allowedElementKeys))
+
+        Err _ ->
+            []
+
+
+elementBodyDecoder : Decoder UIElement
+elementBodyDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\name ->
@@ -448,7 +487,7 @@ actionBindingDecoder : Decoder ActionBinding
 actionBindingDecoder =
     Decode.map3 ActionBinding
         (Decode.field "action" Decode.string)
-        (optionalField "params" Decode.value (Encode.object []))
+        (optionalField "params" Expr.validatedParams (Encode.object []))
         (Decode.maybe (Decode.field "confirm" confirmDecoder))
 
 
