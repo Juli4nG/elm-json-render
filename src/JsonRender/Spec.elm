@@ -18,8 +18,8 @@ module JsonRender.Spec exposing
     , Repeat
     )
 
-{-| The json-render flat `Spec` model and its fail-closed decoder, scoped to the
-CloudShield card's component set and pinned to `@json-render/core` v0.19.0.
+{-| The json-render flat `Spec` model and its fail-closed decoder, scoped to this
+package's component set and pinned to `@json-render/core` v0.19.0.
 
 A `Spec` is the canonical flat form: `{ root, elements, state }` where `elements` is a
 map keyed by id and children are referenced by string key (never nested inline).
