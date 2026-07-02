@@ -1,8 +1,8 @@
 # Supported json-render subset & contract notes
 
 `elm-json-render` implements the json-render **wire format** pinned to
-`@json-render/core` v0.19.0 (`contract/pinned-format-reference.md`), **scoped to the
-CloudShield card's needs**. This file records exactly what is and isn't supported, and
+`@json-render/core` v0.19.0 (`contract/pinned-format-reference.md`), **scoped to a
+practical v1 subset**. This file records exactly what is and isn't supported, and
 where the renderer deliberately diverges from stock json-render. Per the package's
 fail-closed stance, "not supported" almost always means **the decoder rejects it**, not
 "silently ignored".
@@ -17,7 +17,7 @@ fail-closed stance, "not supported" almost always means **the decoder rejects it
 | `Badge`         | ✅ | `value` expr; tone map idle→neutral, queued/running→info, done→success, error→danger |
 | `Button`        | ✅ | `label` expr; `on.press` action |
 | `Checkbox`      | ✅ | optional `label`, optional two-way `checked` |
-| `FindingsTable` | ⚠️ | `bind` + `groupBy`; renders empty-state when `null`, else groups by field. **Findings payload schema is not pinned by the contract** — implemented minimally; revisit when Track A pins it. |
+| `FindingsTable` | ⚠️ | `bind` + `groupBy`; renders empty-state when `null`, else groups by field. **Findings payload schema is not pinned by the contract** — implemented minimally; revisit when the findings schema is pinned. |
 
 An **unknown component `type` fails the decode** (fail-closed). json-render's own renderer
 is fail-open here (warns + renders `null`); we are not.
@@ -32,7 +32,7 @@ is fail-open here (warns + renders `null`); we are not.
 | `{ "$bindState": "/ptr" }`  | ✅ | two-way; write-back = the pointer |
 | `{ "$bindItem": "field" }`  | ✅ | two-way; write-back = `basePath ++ "/" ++ field` (whole-item `""` → `basePath`, no trailing slash) |
 | `{ "$template": "…${/ptr}…${bare}…" }` | ✅ | `${/abs}` → state; `${bare}` → item-first then state |
-| `{ "$cond": …, "$then": …, "$else": … }` | ❌ | **rejected at decode.** Not needed by the card; add when one needs it. |
+| `{ "$cond": …, "$then": …, "$else": … }` | ❌ | **rejected at decode.** Not needed by the v1 subset; add when a manifest needs it. |
 | `{ "$computed": "fn", "args": … }` | ❌ | **rejected at decode.** Needs a host function registry; out of scope for v1. |
 | unknown `$foo` directive    | ❌ | **rejected at decode** (stock json-render is fail-open and keeps it verbatim; we fail-closed). |
 | directive object with extra non-`$` siblings | ❌ | **rejected** — a directive must be the only key, else its siblings would be silently dropped. |
@@ -43,7 +43,7 @@ is fail-open here (warns + renders `null`); we are not.
 |-------|-----------|-------|
 | `type` / `props` / `children` / `on` / `repeat` | ✅ | |
 | `visible` | ❌ | **rejected at decode.** json-render's `VisibilityCondition` is not implemented; a manifest relying on `visible` to hide a control must fail closed rather than render it unconditionally. |
-| `watch`   | ❌ | **rejected at decode.** Not used by the card. |
+| `watch`   | ❌ | **rejected at decode.** Not used by the v1 subset. |
 
 ## Actions
 
@@ -55,7 +55,7 @@ is fail-open here (warns + renders `null`); we are not.
 - `confirm` is honored by the renderer (it owns the dialog) and only emits on accept.
   Confirm accepts only `title`/`message`/`confirmLabel`/`cancelLabel`/`variant`.
 - **Multiple bindings per event are rejected at decode.** json-render allows `on.press`
-  to be an `ActionBinding[]`; the card uses exactly one. An array of length ≠ 1 fails the
+  to be an `ActionBinding[]`; the v1 subset uses exactly one. An array of length ≠ 1 fails the
   decode (a single-element array is accepted) rather than silently truncating to the first.
 - Built-in runtime verbs (`setState`/`pushState`/`removeState`/`push`/`pop`/`validateForm`)
   are **not** implemented as renderer built-ins — every verb surfaces to the host, which
@@ -79,7 +79,7 @@ fails), **action binding** (`action`/`params`/`confirm`), **confirm**, and **rep
 2. **Structural validation is built into the decoder** (missing root, dangling child key,
    `repeat` without children) rather than a separate opt-in `validateSpec` pass.
 3. **`FindingsTable` payload is underspecified** by the contract; the minimal grouped
-   rendering here is provisional and should be reconciled with Track A once the findings
+   rendering here is provisional and should be reconciled once the findings
    schema is pinned.
 4. **`SpecStream` / streaming JSON-Patch** (`data-spec` parts) is out of scope — we
    consume a complete flat `Spec`.

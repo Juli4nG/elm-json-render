@@ -285,8 +285,8 @@ renderBadge ctx props =
         [ Html.text state ]
 
 
-{-| Tone mapping from a per-row `scanState` string. Identical to the Track A island so
-both renderers match (`pinned-format-reference.md` §"STILL-UNCERTAIN" item 3).
+{-| Tone mapping from a status string (`pinned-format-reference.md` §"STILL-UNCERTAIN"
+item 3).
 -}
 badgeTone : String -> String
 badgeTone state =

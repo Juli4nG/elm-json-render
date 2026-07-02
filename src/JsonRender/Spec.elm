@@ -87,8 +87,8 @@ type alias Spec =
 
 {-| One element: its (validated) component type, its strictly-decoded props, its child
 keys, its event bindings, and an optional `repeat`. Mirrors json-render's `UIElement`
-shape (`type/props/children/on/repeat`), minus the `visible`/`watch` siblings the card
-does not use.
+shape (`type/props/children/on/repeat`), minus the `visible`/`watch` siblings this
+renderer does not support.
 -}
 type alias UIElement =
     { componentType : ComponentType
@@ -152,7 +152,7 @@ type alias TextProps =
     { value : Expr }
 
 
-{-| `Badge` props: the `value` expression (a per-row `scanState` string in the card).
+{-| `Badge` props: the `value` expression (e.g. a status string mapped to a tone).
 -}
 type alias BadgeProps =
     { value : Expr }

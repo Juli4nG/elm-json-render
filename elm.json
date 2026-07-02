@@ -1,6 +1,6 @@
 {
     "type": "package",
-    "name": "avantelogic/elm-json-render",
+    "name": "Juli4nG/elm-json-render",
     "summary": "Native, fail-closed Elm renderer for json-render manifests",
     "license": "MIT",
     "version": "1.0.0",

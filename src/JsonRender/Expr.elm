@@ -23,7 +23,7 @@ Every dynamic value in a manifest is a plain JSON object carrying a single
 
 **Fail-closed:** an object carrying an unsupported `$`-directive (e.g. `$cond`,
 `$computed`) **fails the decode**. json-render's own runtime is fail-open here; we are
-not. The supported set is exactly what the card uses.
+not. The supported set is exactly the v1 subset.
 
 
 # Expressions
