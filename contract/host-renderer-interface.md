@@ -9,7 +9,7 @@ mechanism. Nothing here is Solid- or Elm-specific. Format pinned in
 ## 1. Inputs
 
 ### 1.1 Manifest (the json-render `Spec`)
-The validated `ui` body of the CloudShield manifest envelope — `card.json`, a flat
+The validated `ui` body of the manifest envelope — `card.json`, a flat
 `Spec { root, elements, state }` in json-render's real dialect. The host has **already**
 run fail-closed validation (catalog `validate` + structural `validateSpec`) before handing
 it to the renderer; the renderer assumes a valid spec and does NOT re-open trust decisions.
@@ -18,7 +18,7 @@ see pinned-format-reference §6.)
 
 ### 1.2 Host state object (the data the renderer reflects)
 The host owns and pushes a single JSON state object addressed by RFC 6901 JSON Pointers.
-**Authoritative host model** (what CloudShield/Exosphere tracks):
+**Authoritative host model** (what the host tracks):
 
 ```
 instances : [ { id, name, status } ]      // from $instances (host-resolved, fresh)
@@ -61,7 +61,7 @@ fires. Shape (framework-neutral):
 { verb: string, params: object }
 ```
 
-- `verb` = the `ActionBinding.action` string from the manifest (e.g. `"cloudshield.startScan"`).
+- `verb` = the `ActionBinding.action` string from the manifest (e.g. `"scan.start"`).
 - `params` = the manifest `params` object **with json-render expressions resolved** against
   the current state / repeat scope at dispatch time.
 - The renderer does NOT execute the verb. It hands `(verb, params)` to the host (Solid:

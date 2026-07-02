@@ -39,7 +39,7 @@ the exact same bytes as the contract.
 -}
 
 
-{-| The pinned CloudShield card manifest (\`contract/card.json\`). -}
+{-| The pinned demo card manifest (\`contract/card.json\`). -}
 cardJson : String
 cardJson =
     """${cardJson}"""

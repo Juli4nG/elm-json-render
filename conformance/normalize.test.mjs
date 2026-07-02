@@ -42,14 +42,14 @@ test("reflects the checked PROPERTY (not attribute) and self-closes void inputs"
 
 test("collapses text whitespace and indents the tree", () => {
   const node = el("div", { class: "jr-card" }, [
-    el("h2", { class: "jr-card__title" }, [text("  CloudShield   scan  ")]),
+    el("h2", { class: "jr-card__title" }, [text("  Server   scan  ")]),
   ]);
   assert.equal(
     normalizeElement(node),
     [
       '<div class="jr-card">',
       '  <h2 class="jr-card__title">',
-      "    CloudShield scan",
+      "    Server scan",
       "  </h2>",
       "</div>",
     ].join("\n")

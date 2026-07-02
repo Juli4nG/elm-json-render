@@ -149,8 +149,8 @@ suite =
             , test "$template interpolates a bare item field (item-first)" <|
                 \_ ->
                     Expr.resolveDisplay (rowCtx 0)
-                        (ETemplate "Queue a CloudShield scan for ${name}?")
-                        |> Expect.equal "Queue a CloudShield scan for web-frontend-01?"
+                        (ETemplate "Queue a scan for ${name}?")
+                        |> Expect.equal "Queue a scan for web-frontend-01?"
             , test "$template interpolates an absolute pointer" <|
                 \_ ->
                     Expr.resolveDisplay (Expr.rootContext state)

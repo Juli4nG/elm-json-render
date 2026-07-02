@@ -9,7 +9,7 @@ the exact same bytes as the contract.
 -}
 
 
-{-| The pinned CloudShield card manifest (`contract/card.json`).
+{-| The pinned demo card manifest (`contract/card.json`).
 -}
 cardJson : String
 cardJson =
@@ -18,7 +18,7 @@ cardJson =
   "elements": {
     "card": {
       "type": "Card",
-      "props": { "title": "CloudShield — scan instances" },
+      "props": { "title": "Scan instances" },
       "children": ["toolbar", "list", "results"]
     },
     "toolbar": {
@@ -39,11 +39,11 @@ cardJson =
       "props": { "label": "Scan selected" },
       "on": {
         "press": {
-          "action": "cloudshield.startScan",
+          "action": "scan.start",
           "params": { "targetInstanceIds": [] },
           "confirm": {
             "title": "Scan selected instances?",
-            "message": "Queue CloudShield scans for the currently selected instances.",
+            "message": "Queue scans for the currently selected instances.",
             "variant": "default"
           }
         }
@@ -87,11 +87,11 @@ cardJson =
       "props": { "label": "Scan" },
       "on": {
         "press": {
-          "action": "cloudshield.startScan",
+          "action": "scan.start",
           "params": { "targetInstanceIds": [{ "$item": "id" }] },
           "confirm": {
             "title": "Scan this instance?",
-            "message": { "$template": "Queue a CloudShield scan for ${name}?" },
+            "message": { "$template": "Queue a scan for ${name}?" },
             "variant": "default"
           }
         }

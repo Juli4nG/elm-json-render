@@ -171,7 +171,7 @@ suite =
         , test "the card title renders" <|
             \_ ->
                 start allIdle
-                    |> ProgramTest.expectViewHas [ Selector.text "CloudShield — scan instances" ]
+                    |> ProgramTest.expectViewHas [ Selector.text "Scan instances" ]
         , test "each instance name renders in its row" <|
             \_ ->
                 start allIdle
@@ -214,7 +214,7 @@ suite =
                                 |> Maybe.map (\a -> ( a.verb, Encode.encode 0 a.params ))
                                 |> Expect.equal
                                     (Just
-                                        ( "cloudshield.startScan"
+                                        ( "scan.start"
                                         , "{\"targetInstanceIds\":[\"i-1b2c3d4e\"]}"
                                         )
                                     )
@@ -224,7 +224,7 @@ suite =
                 start oneInstance
                     |> clickRowScan
                     |> ProgramTest.expectViewHas
-                        [ Selector.text "Queue a CloudShield scan for api-backend-02?" ]
+                        [ Selector.text "Queue a scan for api-backend-02?" ]
         , test "dismissing the confirm dialog emits nothing" <|
             \_ ->
                 start oneInstance

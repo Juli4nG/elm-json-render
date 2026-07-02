@@ -226,7 +226,7 @@ applyEffect effect model =
             model
 
         Just (Render.EmitAction action) ->
-            if action.verb == "cloudshield.startScan" then
+            if action.verb == "scan.start" then
                 startScan (targetsOf model action.params) model
 
             else
