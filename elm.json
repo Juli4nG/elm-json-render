@@ -1,9 +1,9 @@
 {
     "type": "package",
     "name": "Juli4nG/elm-json-render",
-    "summary": "Native, fail-closed Elm renderer for json-render manifests",
+    "summary": "Render json-render UI manifests in pure Elm, strict and fail-closed",
     "license": "MIT",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "exposed-modules": [
         "JsonRender",
         "JsonRender.Spec",

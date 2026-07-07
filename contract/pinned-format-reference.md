@@ -4,12 +4,11 @@
 (HEAD of default branch, 2026-06-15). `@json-render/core` **v0.19.0**
 (`packages/core/package.json`), `zod ^4.3.6`. Renderer packages reviewed:
 `@json-render/react`, `@json-render/solid`, `@json-render/svelte` (all v0.19.0).
-Pinned from source by the Phase 1 Part 1 workflow (3 independent from-source pin
-reports, reconciled; the claim with a file+symbol citation wins).
+Pinned by reading the json-render source at the cited commit.
 
-This is the wire format BOTH renderers (Solid island + native Elm) MUST implement.
-It is the *format* we adopt as the AI-generation target — NOT json-render's renderer.
-**Fail-closed is ours:** the json-render renderer is fail-OPEN by default (see §6);
+This is the wire format BOTH renderers (another renderer of this format + native Elm)
+MUST implement. It is the *format* we adopt, NOT json-render's renderer.
+**Fail-closed:** the json-render renderer is fail-OPEN by default (see §6);
 we validate against our catalog and refuse to mount on any error.
 
 ---
@@ -27,8 +26,9 @@ interface Spec {
 ```
 
 - Exactly three fields: `root`, `elements`, `state`. **No `version`, no `meta`.**
-  (Our manifest *envelope* — `schemaVersion`, `catalog`, `publisher` — wraps this
-  `Spec` as its `ui` body; the envelope is ours, not json-render's. See spec §1.)
+  (A manifest *envelope* (`schemaVersion`, `catalog`, `publisher`) may wrap this
+  `Spec` as its `ui` body; that envelope is a host convention, not part of json-render.
+  See spec §1.)
 - Children are referenced by **string keys** into `elements`, never nested inline.
 - A human-authored **nested** form exists (`children: NestedNode[]`) and is converted
   to the flat `Spec` by `nestedToFlat()` (`types.ts:688`, auto-keys `el-0`, `el-1`, …).
@@ -206,15 +206,15 @@ Three distinct things (do not conflate):
    key → warn + skip. Unknown action → warn + no-op. Each element wrapped in an
    `ErrorBoundary` (Solid `renderer.tsx:287-294`).
 
-**Security implication — fail-CLOSED is ours.** To reject a whole manifest on any
-off-catalog `type`/prop/action, **WE** must (a) run our own strict catalog `validate(spec)`
+**Security implication (fail-CLOSED).** To reject a whole manifest on any
+off-catalog `type`/prop/action, this renderer must (a) run a strict catalog `validate(spec)`
 with real per-component Zod prop schemas AND (b) run `validateSpec(spec)` structurally,
 **before mounting**, and refuse to render on any error. The stock renderer will silently
-drop unknowns; we do not rely on it.
+drop unknowns; this package does not rely on it.
 
 ---
 
-## CONFIRMED vs STILL-UNCERTAIN
+## CONFIRMED vs Open questions
 
 ### CONFIRMED from source (file+symbol cited above)
 - `Spec = { root, elements: Record<id,UIElement>, state? }` flat map. `types.ts:172`.
@@ -248,12 +248,12 @@ drop unknowns; we do not rely on it.
   per-row Scan param `[ { "$item": "id" } ]` therefore delivers the literal id. **Verified
   2026-06-22 from the clone.** (§5.1)
 
-### STILL-UNCERTAIN — verify before relying
+### Open questions (verify before relying)
 1. **Empty-array "use current selection" param** (`{ "targetInstanceIds": [] }` on the top
    "Scan selected" button). The literal empty array passes through fine; the **semantic**
    ("empty ⇒ use selection state") is **our host convention**, not json-render's. No source
    risk; host-owned.
-3. **`ProgressInline`/`FindingsTable`/`Badge` tone mapping** from a per-row `scanState`
+3. **`ProgressInline`/`GroupedTable`/`Badge` tone mapping** from a per-row `scanState`
    string. json-render binds the string fine; mapping `running→spinner`, `error→danger` is
    **component-internal** (our catalog component code), not wire-level. Renderers implement
    identical tone maps.

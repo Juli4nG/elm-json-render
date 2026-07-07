@@ -1,9 +1,9 @@
 # Host ↔ Renderer Interface Contract (framework-neutral)
 
-Applies identically to the **Solid custom-element island** and the **native Elm
+Applies identically to **any other renderer of this contract** and the **native Elm
 renderer**. Both consume the same json-render flat `Spec` (`card.json`) and the same
 host-state shape, emit the same action events, and react to the same state-push
-mechanism. Nothing here is Solid- or Elm-specific. Format pinned in
+mechanism. Nothing here is renderer-specific. Format pinned in
 `pinned-format-reference.md`.
 
 ## 1. Inputs
@@ -35,7 +35,7 @@ its model into the denormalized array the manifest reads, under these exact poin
 ```jsonc
 {
   "/selectAll": false,                          // bound by select-all checkbox ($bindState)
-  "/results":   null,                           // bound by FindingsTable ($state)
+  "/results":   null,                           // bound by GroupedTable ($state)
   "/instances": [
     {
       "id":        "<id>",                       // stable repeat key
@@ -108,7 +108,7 @@ host.setState(path, value)   // path = RFC 6901 JSON Pointer; value = new JSON
 - **Select-all**: `setState("/selectAll", true)` then fan out
   `setState("/instances/<i>/selected", true)` for each eligible row (the host owns the
   fan-out; json-render's select-all checkbox only two-way-binds `/selectAll`).
-- **Findings**: `setState("/results", <payload>)` re-renders the `FindingsTable`.
+- **Findings**: `setState("/results", <payload>)` re-renders the `GroupedTable`.
 
 **Reactivity caveat (both renderers must honor):** json-render's default store compares by
 reference (`===`, `state-store.ts`). To make a change register, the host MUST pass a **new

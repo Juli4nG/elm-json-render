@@ -99,7 +99,7 @@ cardJson =
       "children": []
     },
     "results": {
-      "type": "FindingsTable",
+      "type": "GroupedTable",
       "props": {
         "bind": { "$state": "/results" },
         "groupBy": "severity"

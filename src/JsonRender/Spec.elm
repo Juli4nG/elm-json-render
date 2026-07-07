@@ -3,7 +3,7 @@ module JsonRender.Spec exposing
     , decoder
     , UIElement
     , ComponentType(..)
-    , componentType
+    , componentName
     , Props(..)
     , Direction(..)
     , CardProps
@@ -12,7 +12,7 @@ module JsonRender.Spec exposing
     , BadgeProps
     , ButtonProps
     , CheckboxProps
-    , FindingsTableProps
+    , GroupedTableProps
     , ActionBinding
     , Confirm
     , Repeat
@@ -24,15 +24,15 @@ package's component set and pinned to `@json-render/core` v0.19.0.
 A `Spec` is the canonical flat form: `{ root, elements, state }` where `elements` is a
 map keyed by id and children are referenced by string key (never nested inline).
 
-**Fail-closed by construction.** The decoder rejects, rather than silently dropping:
+**Fail-closed.** The decoder rejects, rather than silently dropping:
 
   - an **unknown / off-catalog** component `type` (json-render's renderer is fail-open
-    here — we are not);
+    here; we are not);
   - props that don't match the strict per-component shape;
   - a **dangling** child key, a **missing** root, or a `repeat` element with no children
     (the structural floor `validateSpec` enforces).
 
-A rejected manifest never produces a partial tree — the host shows an error stub.
+A rejected manifest never produces a partial tree: the host shows an error stub.
 
 
 # Spec
@@ -45,7 +45,7 @@ A rejected manifest never produces a partial tree — the host shows an error st
 
 @docs UIElement
 @docs ComponentType
-@docs componentType
+@docs componentName
 
 
 # Props
@@ -58,7 +58,7 @@ A rejected manifest never produces a partial tree — the host shows an error st
 @docs BadgeProps
 @docs ButtonProps
 @docs CheckboxProps
-@docs FindingsTableProps
+@docs GroupedTableProps
 
 
 # Actions & iteration
@@ -108,7 +108,7 @@ type ComponentType
     | Badge
     | Button
     | Checkbox
-    | FindingsTable
+    | GroupedTable
 
 
 {-| Strictly-decoded props, one variant per component type. The variant always agrees
@@ -122,7 +122,7 @@ type Props
     | BadgeP BadgeProps
     | ButtonP ButtonProps
     | CheckboxP CheckboxProps
-    | FindingsTableP FindingsTableProps
+    | GroupedTableP GroupedTableProps
 
 
 {-| `Stack` layout direction.
@@ -173,17 +173,18 @@ type alias CheckboxProps =
     }
 
 
-{-| `FindingsTable` props: the `bind` expression pointing at the findings payload and a
-`groupBy` field name.
+{-| `GroupedTable` props: the `bind` expression pointing at the array of rows to group
+and a `groupBy` field name. The table groups the array of records by that field and shows
+counts.
 -}
-type alias FindingsTableProps =
+type alias GroupedTableProps =
     { bind : Expr
     , groupBy : String
     }
 
 
 {-| An event binding: a named verb, its (unresolved) params, and an optional confirm
-dialog. The key is `action`/`params` per the pinned format — never a URL.
+dialog. The key is `action`/`params` per the pinned format, never a URL.
 -}
 type alias ActionBinding =
     { action : String
@@ -193,7 +194,7 @@ type alias ActionBinding =
 
 
 {-| A confirm dialog shown by the renderer before an action emits. `title` and `message`
-may be expressions (the per-row Scan message is a `$template`).
+may be expressions (e.g. a `$template` interpolating a row field).
 -}
 type alias Confirm =
     { title : Expr
@@ -215,8 +216,8 @@ type alias Repeat =
 
 {-| The component type's wire name, for diagnostics.
 -}
-componentType : ComponentType -> String
-componentType ct =
+componentName : ComponentType -> String
+componentName ct =
     case ct of
         Card ->
             "Card"
@@ -236,8 +237,8 @@ componentType ct =
         Checkbox ->
             "Checkbox"
 
-        FindingsTable ->
-            "FindingsTable"
+        GroupedTable ->
+            "GroupedTable"
 
 
 
@@ -308,7 +309,7 @@ elementStructuralErrors elements ( id, element ) =
 
 
 {-| The element-level keys this renderer handles. Any other sibling of `type` (notably
-json-render's `visible` / `watch`) is **rejected**, not silently ignored — otherwise a
+json-render's `visible` / `watch`) is **rejected**, not silently ignored. Otherwise a
 manifest relying on `visible` to hide a sensitive control would render it unconditionally
 here, breaking the fail-closed boundary.
 -}
@@ -324,7 +325,7 @@ elementDecoder =
 
 {-| Run `inner` only if `value` is a JSON object whose keys are all in `allowed`;
 otherwise fail-closed. The strictness floor reused for elements, props, action bindings,
-confirm, and repeat — Elm decoders ignore unknown keys (and silently default on
+confirm, and repeat. Elm decoders ignore unknown keys (and silently default on
 non-objects) by default, which would drop unsupported contract surface (`visible`,
 `onSuccess`, a future `disabled` prop) or accept a malformed `"props": []`.
 -}
@@ -391,8 +392,8 @@ parseComponentType name =
         "Checkbox" ->
             Just Checkbox
 
-        "FindingsTable" ->
-            Just FindingsTable
+        "GroupedTable" ->
+            Just GroupedTable
 
         _ ->
             Nothing
@@ -414,7 +415,7 @@ propsDecoder ct =
 
                     Just _ ->
                         Decode.field "props"
-                            (rejectUnknownKeys (componentType ct ++ " prop")
+                            (rejectUnknownKeys (componentName ct ++ " prop")
                                 (allowedPropKeys ct)
                                 (propsBodyDecoder ct)
                             )
@@ -442,7 +443,7 @@ allowedPropKeys ct =
         Checkbox ->
             [ "label", "checked" ]
 
-        FindingsTable ->
+        GroupedTable ->
             [ "bind", "groupBy" ]
 
 
@@ -485,8 +486,8 @@ propsBodyDecoder ct =
                 (Decode.maybe (Decode.field "label" Expr.decoder))
                 (Decode.maybe (Decode.field "checked" Expr.decoder))
 
-        FindingsTable ->
-            Decode.map2 (\b g -> FindingsTableP (FindingsTableProps b g))
+        GroupedTable ->
+            Decode.map2 (\b g -> GroupedTableP (GroupedTableProps b g))
                 (Decode.field "bind" Expr.decoder)
                 (optionalField "groupBy" Decode.string "severity")
 

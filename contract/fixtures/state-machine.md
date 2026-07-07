@@ -1,9 +1,9 @@
 # Demo scan state machine (fixture-driven)
 
-Drives both renderers identically so the Solid island and the Elm renderer animate
-the same. The demo harness owns a wall-clock timeline keyed by instance id and pushes
-host-state updates (see `../host-renderer-interface.md`) at each tick. The renderer is
-purely reactive — it never advances state itself.
+Drives both renderers identically so any other renderer of this contract and the Elm
+renderer animate the same. The demo harness owns a wall-clock timeline keyed by instance
+id and pushes host-state updates (see `../host-renderer-interface.md`) at each tick. The
+renderer is purely reactive; it never advances state itself.
 
 ## Per-instance lifecycle
 

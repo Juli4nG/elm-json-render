@@ -2,7 +2,7 @@
   "name": "elm-json-render-conformance",
   "private": true,
   "type": "module",
-  "description": "Playwright conformance: capture + normalize the Elm renderer's HTML for Track A diffing",
+  "description": "Playwright conformance: capture + normalize the Elm renderer's HTML for diffing against other renderers of the same format",
   "scripts": {
     "build-demo": "node ../scripts/gen-fixtures.mjs && cd ../demo && elm make src/Main.elm --output=app.js",
     "capture": "npm run build-demo && node capture.mjs",

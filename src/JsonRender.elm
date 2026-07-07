@@ -7,7 +7,7 @@ module JsonRender exposing
 manifests, pinned to `@json-render/core` v0.19.0.
 
 This top module is the convenience entry point: validate a manifest fail-closed, and get
-an error stub for the failure path. The renderer itself (a small TEA component —
+an error stub for the failure path. The renderer itself (a small TEA component:
 `Model` / `Msg` / `Effect` / `update` / `view`) lives in
 [`JsonRender.Render`](JsonRender-Render); the typed spec model in
 [`JsonRender.Spec`](JsonRender-Spec); the expression dialect in
@@ -24,7 +24,7 @@ Typical host wiring:
             JsonRender.errorStub message
 
 Decoding is the security gate: an off-catalog component type, a malformed prop, a
-dangling child key, or a missing root all produce `Err` — never a partial tree.
+dangling child key, or a missing root all produce `Err`, never a partial tree.
 
 
 # Validate a manifest

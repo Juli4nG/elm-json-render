@@ -2,8 +2,8 @@
 //
 // Loads the compiled demo in its deterministic terminal state
 // (`?scenario=final`), normalizes the `.jr-root` subtree with the shared
-// `normalize.mjs`, and writes the golden snapshot. Track A captures its Solid island
-// the same way with the same normalizer, so the two goldens diff byte-for-byte.
+// `normalize.mjs`, and writes the golden snapshot. Other renderers of the same format
+// capture the same way with the same normalizer, so the two goldens diff byte-for-byte.
 //
 // Uses the locally-installed Google Chrome (`channel: "chrome"`) so no browser download
 // is required. Run: `npm run capture` (from conformance/).

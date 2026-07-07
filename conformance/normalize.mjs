@@ -1,10 +1,10 @@
 // Shared HTML normalizer for the json-render conformance harness.
 //
-// Both Track A (Solid custom-element island) and Track B (this native Elm renderer)
+// Both other renderers of the same format and this native Elm renderer
 // run their rendered `.jr-root` subtree through THIS function, so the two normalized
 // snapshots can be diffed byte-for-byte. The normalizer keeps only the semantic shape
-// the contract pins — tag tree, `jr-*` classes, text, and a small allowlist of
-// structural attributes — and drops everything frameworks differ on (event wiring,
+// the contract pins (tag tree, `jr-*` classes, text, and a small allowlist of
+// structural attributes) and drops everything frameworks differ on (event wiring,
 // inline styles, attribute order/whitespace).
 //
 // `normalizeElement` runs inside the browser (it takes a live DOM Element); the source
@@ -12,7 +12,7 @@
 // self-contained so it serializes cleanly across the CDP boundary.
 //
 // Two cross-framework gotchas it handles deliberately:
-//   - `checked` is a DOM *property*, not an attribute (both Elm and Solid set the
+//   - `checked` is a DOM *property*, not an attribute (renderers set the
 //     property), so it is read off `el.checked`, not `getAttribute`.
 //   - void elements (`input`) are emitted self-closing with no bogus close tag.
 
@@ -42,7 +42,7 @@ export function normalizeElement(el, depth = 0) {
       let value = el.getAttribute(name);
       if (name === "class") {
         // Keep ONLY the pinned `jr-*` namespace; drop framework/host-specific class
-        // tokens (Solid wrappers, design-system layers) so the two tracks' goldens
+        // tokens (framework wrappers, design-system layers) so the goldens
         // diff on renderer semantics, not framework noise. Omit `class` if none remain.
         value = value
           .trim()

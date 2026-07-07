@@ -29,7 +29,7 @@ test("keeps only jr-* class tokens, sorted", () => {
 });
 
 test("omits the class attribute entirely when no jr-* tokens remain", () => {
-  const node = el("div", { class: "solid-wrapper data-v-abc" });
+  const node = el("div", { class: "framework-wrapper data-v-abc" });
   assert.equal(normalizeElement(node), "<div></div>");
 });
 

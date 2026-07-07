@@ -14,7 +14,7 @@ module JsonRender.Expr exposing
     )
 
 {-| The json-render expression / binding dialect, scoped to this package's
-supported set and pinned to `@json-render/core` v0.19.0 (see `contract/pinned-format-reference.md`).
+supported set and pinned to `@json-render/core` v0.19.0 (see [`SUPPORT.md`](https://github.com/Juli4nG/elm-json-render/blob/main/SUPPORT.md)).
 
 Every dynamic value in a manifest is a plain JSON object carrying a single
 `$`-prefixed discriminant key. This module decodes the supported forms into a typed
@@ -62,13 +62,13 @@ import Json.Encode as Encode
 {-| A decoded json-render expression. The discriminant maps 1:1 to the pinned
 `$`-forms:
 
-  - `ELiteral v` — any value with no `$`-directive (scalar, array, or plain object).
-  - `EState ptr` — `{ "$state": "/ptr" }`, read global state.
-  - `EItem field` — `{ "$item": "field" }`, read the current repeat item (field `""` = whole item).
-  - `EIndex` — `{ "$index": true }`, the current repeat index.
-  - `EBindState ptr` — `{ "$bindState": "/ptr" }`, two-way bind to global state.
-  - `EBindItem field` — `{ "$bindItem": "field" }`, two-way bind to a repeat-item field.
-  - `ETemplate tmpl` — `{ "$template": "…${/ptr}…${bare}…" }`, string interpolation.
+  - `ELiteral v`: any value with no `$`-directive (scalar, array, or plain object).
+  - `EState ptr`: `{ "$state": "/ptr" }`, read global state.
+  - `EItem field`: `{ "$item": "field" }`, read the current repeat item (field `""` = whole item).
+  - `EIndex`: `{ "$index": true }`, the current repeat index.
+  - `EBindState ptr`: `{ "$bindState": "/ptr" }`, two-way bind to global state.
+  - `EBindItem field`: `{ "$bindItem": "field" }`, two-way bind to a repeat-item field.
+  - `ETemplate tmpl`: `{ "$template": "…${/ptr}…${bare}…" }`, string interpolation.
 
 -}
 type Expr
@@ -86,7 +86,7 @@ type Expr
 A non-object (string / number / bool / array / null) decodes to `ELiteral`. An object
 with no `$`-prefixed key decodes to `ELiteral`. An object with exactly one supported
 `$`-directive decodes to that form. An object with an **unsupported** `$`-directive, or
-more than one `$`-directive, **fails** — this is the fail-closed boundary.
+more than one `$`-directive, **fails**. This is the fail-closed boundary.
 
 -}
 decoder : Decoder Expr
@@ -109,7 +109,7 @@ classify value =
                     else
                         -- A directive object must be the directive ALONE. Extra siblings
                         -- (e.g. `{ "$item": "id", "kind": "x" }`) would be silently dropped
-                        -- at resolution, corrupting the emitted payload — fail-closed.
+                        -- at resolution, corrupting the emitted payload; fail-closed.
                         Decode.fail
                             ("directive `"
                                 ++ key
@@ -186,10 +186,10 @@ stringField field value toExpr =
 
 {-| The resolution scope handed to every expression.
 
-  - `state` — the host-owned global state `Value` (the single source of truth).
-  - `item` — the current `repeat` item, if inside a repeat scope.
-  - `index` — the current `repeat` index, if inside a repeat scope.
-  - `basePath` — the repeat item's absolute JSON Pointer (`statePath ++ "/" ++ index`),
+  - `state`: the host-owned global state `Value` (the single source of truth).
+  - `item`: the current `repeat` item, if inside a repeat scope.
+  - `index`: the current `repeat` index, if inside a repeat scope.
+  - `basePath`: the repeat item's absolute JSON Pointer (`statePath ++ "/" ++ index`),
     used to compute `$bindItem` / top-level `$item` write-back paths.
 
 -}
@@ -460,7 +460,7 @@ placeholderValue ctx inner =
 it returns the params `Value` unchanged, but fails if any nested object carrying a
 `$`-directive is not a supported, well-formed [`Expr`](#Expr) (e.g. an unsupported
 `$cond`, or a malformed `{ "$item": 123 }`). This closes the gap where params are stored
-raw and only resolved at dispatch — a bad directive is rejected with the rest of the
+raw and only resolved at dispatch: a bad directive is rejected with the rest of the
 manifest, never emitted to the host.
 -}
 validatedParams : Decoder Value
@@ -512,17 +512,16 @@ checkAll values =
             checkParam first |> Result.andThen (\() -> checkAll rest)
 
 
-{-| Resolve an action's `params` object per the pinned `resolveActionParam` semantics
-(`pinned-format-reference.md` §5.1):
+{-| Resolve an action's `params` object per the pinned `resolveActionParam` semantics:
 
   - A **top-level** `{ "$item": "field" }` resolves to the absolute state **path**
     (`basePath ++ "/" ++ field`) so the host can target the row.
   - A **top-level** `{ "$index": true }` resolves to the index **number**.
-  - Everything else (including `$item` **nested in an array**, as the per-row Scan
-    button uses) resolves to the **value** by deep recursion.
+  - Everything else (including `$item` **nested in an array**) resolves to the **value**
+    by deep recursion.
 
-So `{ "targetInstanceIds": [ { "$item": "id" } ] }` yields `{ "targetInstanceIds":
-["<id>"] }` — the literal id, value-clean by construction.
+So `{ "ids": [ { "$item": "id" } ] }` yields `{ "ids": ["<id>"] }`: the literal id, never
+a path.
 
 -}
 resolveParams : Context -> Value -> Value

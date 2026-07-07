@@ -12,7 +12,7 @@ This is a small TEA component. The host owns the json-render `state` and passes 
 [`view`](#view) on every frame; the renderer reads it but never mutates it behind the
 host's back. The only local state the renderer owns is the pending confirm dialog. User
 actions (button presses, checkbox toggles) surface to the host as `Effect`s the host
-applies — exactly mirroring the framework-neutral host↔renderer contract.
+applies, so the host stays the single source of truth.
 
 Because the output is Elm `Html` (no `innerHTML`, no script escape hatch), the rendered
 tree is **XSS-safe by construction**.
@@ -104,10 +104,10 @@ type Msg
 {-| What the renderer asks the host to do. The renderer never performs the side effect
 itself.
 
-  - `EmitAction { verb, params }` — a wired `on:press` fired (and any `confirm` was
+  - `EmitAction { verb, params }`: a wired `on:press` fired (and any `confirm` was
     accepted). `params` are already expression-resolved. The host re-checks the verb
     against its allowlist and performs the side effect.
-  - `EmitStateChange { path, value }` — a two-way input (`$bindState` / `$bindItem`
+  - `EmitStateChange { path, value }`: a two-way input (`$bindState` / `$bindItem`
     checkbox) was toggled. The host treats this as the source of truth, writes it at the
     given absolute JSON Pointer, and re-projects state.
 
@@ -234,8 +234,8 @@ renderComponent ctx element childrenHtml =
         CheckboxP props ->
             renderCheckbox ctx props
 
-        FindingsTableP props ->
-            renderFindingsTable ctx props
+        GroupedTableP props ->
+            renderGroupedTable ctx props
 
 
 renderCard : Context -> Spec.CardProps -> List (Html Msg) -> Html Msg
@@ -285,8 +285,7 @@ renderBadge ctx props =
         [ Html.text state ]
 
 
-{-| Tone mapping from a status string (`pinned-format-reference.md` §"STILL-UNCERTAIN"
-item 3).
+{-| Maps common status strings to a tone class; unrecognized values fall back to neutral.
 -}
 badgeTone : String -> String
 badgeTone state =
@@ -386,50 +385,50 @@ renderCheckbox ctx props =
         )
 
 
-renderFindingsTable : Context -> Spec.FindingsTableProps -> Html Msg
-renderFindingsTable ctx props =
+renderGroupedTable : Context -> Spec.GroupedTableProps -> Html Msg
+renderGroupedTable ctx props =
     let
         value =
             Expr.resolve ctx props.bind
     in
     if isNull value then
-        Html.div [ Attr.class "jr-findings jr-findings--empty" ]
-            [ Html.text "No findings yet" ]
+        Html.div [ Attr.class "jr-grouped-table jr-grouped-table--empty" ]
+            [ Html.text "No rows yet" ]
 
     else
-        renderFindings props.groupBy value
+        renderGroupedRows props.groupBy value
 
 
-renderFindings : String -> Value -> Html Msg
-renderFindings groupBy value =
+renderGroupedRows : String -> Value -> Html Msg
+renderGroupedRows groupBy value =
     let
-        findings =
+        rows =
             Decode.decodeValue (Decode.list (Decode.dict Decode.value)) value
                 |> Result.withDefault []
 
         groups =
-            groupFindings groupBy findings
+            groupRows groupBy rows
     in
-    Html.div [ Attr.class "jr-findings" ]
-        (List.map renderFindingGroup groups)
+    Html.div [ Attr.class "jr-grouped-table" ]
+        (List.map renderGroup groups)
 
 
-renderFindingGroup : ( String, Int ) -> Html Msg
-renderFindingGroup ( label, count ) =
-    Html.div [ Attr.class ("jr-findings__group jr-findings__group--" ++ label) ]
-        [ Html.span [ Attr.class "jr-findings__severity" ] [ Html.text label ]
-        , Html.span [ Attr.class "jr-findings__count" ] [ Html.text (String.fromInt count) ]
+renderGroup : ( String, Int ) -> Html Msg
+renderGroup ( label, count ) =
+    Html.div [ Attr.class ("jr-grouped-table__group jr-grouped-table__group--" ++ label) ]
+        [ Html.span [ Attr.class "jr-grouped-table__label" ] [ Html.text label ]
+        , Html.span [ Attr.class "jr-grouped-table__count" ] [ Html.text (String.fromInt count) ]
         ]
 
 
-groupFindings : String -> List (Dict.Dict String Value) -> List ( String, Int )
-groupFindings groupBy findings =
-    findings
+groupRows : String -> List (Dict.Dict String Value) -> List ( String, Int )
+groupRows groupBy rows =
+    rows
         |> List.foldr
-            (\finding acc ->
+            (\row acc ->
                 let
                     key =
-                        Dict.get groupBy finding
+                        Dict.get groupBy row
                             |> Maybe.andThen (Decode.decodeValue Decode.string >> Result.toMaybe)
                             |> Maybe.withDefault "ungrouped"
                 in
