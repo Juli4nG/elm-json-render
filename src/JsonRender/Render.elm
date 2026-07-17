@@ -397,36 +397,48 @@ renderCheckbox ctx props =
 renderGroupedTable : Context -> Spec.GroupedTableProps -> Html Msg
 renderGroupedTable ctx props =
     let
-        value =
+        groups =
             Expr.resolve ctx props.bind
+                |> decodeRows
+                |> groupRows props.groupBy
+                |> orderGroups
     in
+    case groups of
+        [] ->
+            Html.div [ Attr.class "jr-grouped-table jr-grouped-table--empty" ]
+                [ Html.text "No rows yet" ]
+
+        _ ->
+            let
+                total =
+                    List.sum (List.map Tuple.second groups)
+            in
+            Html.div [ Attr.class "jr-grouped-table" ]
+                (Html.span [ Attr.class "jr-grouped-table__total" ]
+                    [ Html.text (String.fromInt total ++ " total") ]
+                    :: List.map renderGroup groups
+                )
+
+
+decodeRows : Value -> List (Dict.Dict String Value)
+decodeRows value =
     if isNull value then
-        Html.div [ Attr.class "jr-grouped-table jr-grouped-table--empty" ]
-            [ Html.text "No rows yet" ]
+        []
 
     else
-        renderGroupedRows props.groupBy value
+        Decode.decodeValue (Decode.list (Decode.dict Decode.value)) value
+            |> Result.withDefault []
 
 
-renderGroupedRows : String -> Value -> Html Msg
-renderGroupedRows groupBy value =
-    let
-        rows =
-            Decode.decodeValue (Decode.list (Decode.dict Decode.value)) value
-                |> Result.withDefault []
-
-        groups =
-            groupRows groupBy rows
-    in
-    Html.div [ Attr.class "jr-grouped-table" ]
-        (List.map renderGroup groups)
-
-
+{-| One group rendered as a pill: a colored dot, the count, then the label. The
+`jr-grouped-table__group--<label>` modifier drives the dot color from the host stylesheet.
+-}
 renderGroup : ( String, Int ) -> Html Msg
 renderGroup ( label, count ) =
-    Html.div [ Attr.class ("jr-grouped-table__group jr-grouped-table__group--" ++ label) ]
-        [ Html.span [ Attr.class "jr-grouped-table__label" ] [ Html.text label ]
+    Html.span [ Attr.class ("jr-grouped-table__group jr-grouped-table__group--" ++ String.toLower label) ]
+        [ Html.span [ Attr.class "jr-grouped-table__dot" ] []
         , Html.span [ Attr.class "jr-grouped-table__count" ] [ Html.text (String.fromInt count) ]
+        , Html.span [ Attr.class "jr-grouped-table__label" ] [ Html.text label ]
         ]
 
 
@@ -445,6 +457,60 @@ groupRows groupBy rows =
             )
             Dict.empty
         |> Dict.toList
+
+
+{-| Order grouped counts by a canonical severity rank (critical, high, medium, low, info)
+when the labels are recognized severities, dropping zero counts. Unrecognized labels sort
+after the known severities, by descending count then name, so a non-severity `groupBy` still
+renders sensibly.
+-}
+orderGroups : List ( String, Int ) -> List ( String, Int )
+orderGroups =
+    List.filter (\( _, count ) -> count > 0)
+        >> List.sortWith compareGroup
+
+
+compareGroup : ( String, Int ) -> ( String, Int ) -> Order
+compareGroup ( labelA, countA ) ( labelB, countB ) =
+    case ( severityRank labelA, severityRank labelB ) of
+        ( Just rankA, Just rankB ) ->
+            compare rankA rankB
+
+        ( Just _, Nothing ) ->
+            LT
+
+        ( Nothing, Just _ ) ->
+            GT
+
+        ( Nothing, Nothing ) ->
+            case compare countB countA of
+                EQ ->
+                    compare labelA labelB
+
+                order ->
+                    order
+
+
+severityRank : String -> Maybe Int
+severityRank label =
+    case String.toLower label of
+        "critical" ->
+            Just 0
+
+        "high" ->
+            Just 1
+
+        "medium" ->
+            Just 2
+
+        "low" ->
+            Just 3
+
+        "info" ->
+            Just 4
+
+        _ ->
+            Nothing
 
 
 
