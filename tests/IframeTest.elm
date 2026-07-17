@@ -67,6 +67,11 @@ suite =
                 render "https://1-2-3-4.sslip.io/app"
                     |> Query.find [ Selector.tag "iframe" ]
                     |> Query.has [ Selector.attribute (Attr.src "https://1-2-3-4.sslip.io/app") ]
+        , test "the emitted <iframe> pins its color-scheme to light" <|
+            \_ ->
+                render "https://1-2-3-4.sslip.io/app"
+                    |> Query.find [ Selector.tag "iframe" ]
+                    |> Query.has [ Selector.style "color-scheme" "light" ]
         , test "an https src whose origin is NOT allowlisted renders no iframe" <|
             \_ ->
                 render "https://evil.example.com/app"
