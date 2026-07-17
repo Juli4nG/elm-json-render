@@ -55,6 +55,7 @@ import JsonRender.Spec as Spec
         , Spec
         , UIElement
         )
+import Url
 
 
 {-| Renderer-local UI state. Holds only the pending confirm dialog (if any); the
@@ -161,11 +162,16 @@ emitAction emit =
 
 {-| Render the spec against the current host-owned `state`. The returned `Html Msg`
 includes the confirm dialog overlay when one is pending.
+
+`allowedOrigins` is the host-provided iframe origin allowlist: an `Iframe` element renders
+only when its resolved `src` is an https URL whose origin is an exact member of this list.
+An empty list disables all iframes (fail-closed).
+
 -}
-view : Spec -> Value -> Model -> Html Msg
-view spec state (Model model) =
+view : List String -> Spec -> Value -> Model -> Html Msg
+view allowedOrigins spec state (Model model) =
     Html.div [ Attr.class "jr-root" ]
-        [ renderElement spec (Expr.rootContext state) spec.root
+        [ renderElement spec (Expr.rootContext allowedOrigins state) spec.root
         , confirmOverlay model.pendingConfirm
         ]
 
@@ -236,6 +242,9 @@ renderComponent ctx element childrenHtml =
 
         GroupedTableP props ->
             renderGroupedTable ctx props
+
+        IframeP props ->
+            renderIframe ctx props
 
 
 renderCard : Context -> Spec.CardProps -> List (Html Msg) -> Html Msg
@@ -436,6 +445,88 @@ groupRows groupBy rows =
             )
             Dict.empty
         |> Dict.toList
+
+
+
+-- IFRAME (origin-pinned, fail-closed)
+
+
+{-| Render an `Iframe`, origin-pinned. The resolved `src` is emitted as an `<iframe>` ONLY
+when it is a well-formed https URL whose origin (scheme + host + port) is an exact member of
+the host-provided `ctx.allowedOrigins`. Anything else (empty/unresolved src, non-https
+scheme, unparseable URL, or an off-allowlist origin) renders a benign placeholder instead.
+The empty-src case is why the element needs no `visible`: an unresolved binding self-hides.
+-}
+renderIframe : Context -> Spec.IframeProps -> Html Msg
+renderIframe ctx props =
+    let
+        url =
+            Expr.resolveDisplay ctx props.src
+    in
+    if isAllowedIframeSrc ctx.allowedOrigins url then
+        Html.iframe
+            [ Attr.src url
+            , Attr.title (Expr.resolveDisplay ctx props.title)
+
+            -- `allow-same-origin` is safe here BECAUSE the origin-pin guarantees the src is
+            -- cross-origin to the host (Exosphere): the sandbox token grants the embedded app
+            -- access to its OWN origin only, never the parent host origin.
+            , Attr.attribute "sandbox" "allow-scripts allow-same-origin allow-forms"
+            , Attr.attribute "referrerpolicy" "no-referrer"
+            , Attr.style "width" "100%"
+            , Attr.style "height" "85vh"
+            , Attr.style "min-height" "600px"
+            , Attr.style "border" "0"
+            ]
+            []
+
+    else
+        Html.div [ Attr.class "jr-iframe--blocked" ]
+            [ Html.text "Embedded content is unavailable." ]
+
+
+{-| Fail-closed origin pin: `True` only when `src` is a non-empty, well-formed https URL
+whose origin is an exact member of `allowedOrigins`. Origins are compared by exact string
+membership (never substring), so `https://evil.com/https://ok` cannot slip through.
+-}
+isAllowedIframeSrc : List String -> String -> Bool
+isAllowedIframeSrc allowedOrigins src =
+    if String.isEmpty src then
+        False
+
+    else
+        case Url.fromString src of
+            Just url ->
+                (url.protocol == Url.Https)
+                    && List.member (originOf url) allowedOrigins
+
+            Nothing ->
+                False
+
+
+{-| The origin string (scheme + host + optional port) of a parsed URL, matching the shape of
+the host's allowlist entries (`https://host` or `https://host:port`).
+-}
+originOf : Url.Url -> String
+originOf url =
+    let
+        scheme =
+            case url.protocol of
+                Url.Https ->
+                    "https://"
+
+                Url.Http ->
+                    "http://"
+
+        portPart =
+            case url.port_ of
+                Just p ->
+                    ":" ++ String.fromInt p
+
+                Nothing ->
+                    ""
+    in
+    scheme ++ url.host ++ portPart
 
 
 

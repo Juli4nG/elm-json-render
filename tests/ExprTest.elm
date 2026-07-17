@@ -48,7 +48,7 @@ rowCtx index =
             Expr.getByPath ("/instances/" ++ String.fromInt index) state
                 |> Maybe.withDefault Encode.null
     in
-    Expr.childContext "/instances" index item (Expr.rootContext state)
+    Expr.childContext "/instances" index item (Expr.rootContext [] state)
 
 
 encode : Value -> String
@@ -103,7 +103,7 @@ suite =
             , test "a bare scalar decodes to a literal" <|
                 \_ ->
                     Decode.decodeString Expr.decoder "\"hello\""
-                        |> Result.map (Expr.resolve (Expr.rootContext state))
+                        |> Result.map (Expr.resolve (Expr.rootContext [] state))
                         |> Result.map encode
                         |> Expect.equal (Ok "\"hello\"")
             , test "unsupported $-directive fails the decode (fail-closed)" <|
@@ -125,7 +125,7 @@ suite =
         , describe "resolve"
             [ test "$state reads global state" <|
                 \_ ->
-                    Expr.resolve (Expr.rootContext state) (EState "/selectAll")
+                    Expr.resolve (Expr.rootContext [] state) (EState "/selectAll")
                         |> encode
                         |> Expect.equal "false"
             , test "$item reads the repeat item field VALUE" <|
@@ -153,7 +153,7 @@ suite =
                         |> Expect.equal "Queue a scan for web-frontend-01?"
             , test "$template interpolates an absolute pointer" <|
                 \_ ->
-                    Expr.resolveDisplay (Expr.rootContext state)
+                    Expr.resolveDisplay (Expr.rootContext [] state)
                         (ETemplate "all=${/selectAll}")
                         |> Expect.equal "all=false"
             ]
@@ -164,7 +164,7 @@ suite =
                         |> Expect.equal (Just "/instances/2/selected")
             , test "$bindState write-back path is its own pointer" <|
                 \_ ->
-                    Expr.writeBackPath (Expr.rootContext state) (EBindState "/selectAll")
+                    Expr.writeBackPath (Expr.rootContext [] state) (EBindState "/selectAll")
                         |> Expect.equal (Just "/selectAll")
             , test "whole-item $bindItem write-back path has no trailing slash" <|
                 \_ ->
@@ -184,7 +184,7 @@ suite =
                         |> Expect.equal "{\"targetInstanceIds\":[\"i-2c3d4e5f\"]}"
             , test "an empty array passes through verbatim (use-selection signal)" <|
                 \_ ->
-                    Expr.resolveParams (Expr.rootContext state)
+                    Expr.resolveParams (Expr.rootContext [] state)
                         (decode "{\"targetInstanceIds\":[]}")
                         |> encode
                         |> Expect.equal "{\"targetInstanceIds\":[]}"

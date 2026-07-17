@@ -17,8 +17,8 @@ Typical host wiring:
 
     case JsonRender.decodeValue manifestJson of
         Ok spec ->
-            -- mount the renderer, feeding host-owned state
-            Html.map RendererMsg (JsonRender.Render.view spec hostState rendererModel)
+            -- mount the renderer, feeding the iframe origin allowlist + host-owned state
+            Html.map RendererMsg (JsonRender.Render.view allowedOrigins spec hostState rendererModel)
 
         Err message ->
             JsonRender.errorStub message

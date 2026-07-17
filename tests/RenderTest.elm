@@ -85,7 +85,7 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    Html.map RendererMsg (Render.view model.spec model.state model.renderer)
+    Html.map RendererMsg (Render.view [] model.spec model.state model.renderer)
 
 
 start : Value -> ProgramTest Model Msg (Cmd Msg)

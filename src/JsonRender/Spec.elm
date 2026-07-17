@@ -13,6 +13,7 @@ module JsonRender.Spec exposing
     , ButtonProps
     , CheckboxProps
     , GroupedTableProps
+    , IframeProps
     , ActionBinding
     , Confirm
     , Repeat
@@ -59,6 +60,7 @@ A rejected manifest never produces a partial tree: the host shows an error stub.
 @docs ButtonProps
 @docs CheckboxProps
 @docs GroupedTableProps
+@docs IframeProps
 
 
 # Actions & iteration
@@ -109,6 +111,7 @@ type ComponentType
     | Button
     | Checkbox
     | GroupedTable
+    | Iframe
 
 
 {-| Strictly-decoded props, one variant per component type. The variant always agrees
@@ -123,6 +126,7 @@ type Props
     | ButtonP ButtonProps
     | CheckboxP CheckboxProps
     | GroupedTableP GroupedTableProps
+    | IframeP IframeProps
 
 
 {-| `Stack` layout direction.
@@ -183,6 +187,16 @@ type alias GroupedTableProps =
     }
 
 
+{-| `Iframe` props: the `src` URL expression and a `title` expression. Both are required.
+The renderer only emits an `<iframe>` when the resolved `src` is an https URL whose origin
+is in the host-provided allowlist; otherwise it shows a benign placeholder (fail-closed).
+-}
+type alias IframeProps =
+    { src : Expr
+    , title : Expr
+    }
+
+
 {-| An event binding: a named verb, its (unresolved) params, and an optional confirm
 dialog. The key is `action`/`params` per the pinned format, never a URL.
 -}
@@ -239,6 +253,9 @@ componentName ct =
 
         GroupedTable ->
             "GroupedTable"
+
+        Iframe ->
+            "Iframe"
 
 
 
@@ -395,6 +412,9 @@ parseComponentType name =
         "GroupedTable" ->
             Just GroupedTable
 
+        "Iframe" ->
+            Just Iframe
+
         _ ->
             Nothing
 
@@ -446,6 +466,9 @@ allowedPropKeys ct =
         GroupedTable ->
             [ "bind", "groupBy" ]
 
+        Iframe ->
+            [ "src", "title" ]
+
 
 decodeFromValue : Decoder a -> Value -> Decoder a
 decodeFromValue dec value =
@@ -490,6 +513,11 @@ propsBodyDecoder ct =
             Decode.map2 (\b g -> GroupedTableP (GroupedTableProps b g))
                 (Decode.field "bind" Expr.decoder)
                 (optionalField "groupBy" Decode.string "severity")
+
+        Iframe ->
+            Decode.map2 (\s t -> IframeP (IframeProps s t))
+                (Decode.field "src" Expr.decoder)
+                (Decode.field "title" Expr.decoder)
 
 
 directionDecoder : Decoder Direction
