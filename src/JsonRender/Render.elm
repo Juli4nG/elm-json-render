@@ -249,6 +249,9 @@ renderComponent ctx element childrenHtml =
         TableP props ->
             renderTable ctx props
 
+        AlertP props ->
+            renderAlert ctx props
+
 
 renderCard : Context -> Spec.CardProps -> List (Html Msg) -> Html Msg
 renderCard ctx props childrenHtml =
@@ -579,6 +582,47 @@ cellText ctx maybeValue =
     maybeValue
         |> Maybe.map (Expr.ELiteral >> Expr.resolveDisplay ctx)
         |> Maybe.withDefault ""
+
+
+
+-- ALERT
+
+
+{-| Render an `Alert`: `div.jr-alert.jr-alert--<tone>` with an optional title span followed
+by the message span. The `jr-alert--<tone>` modifier drives host styling.
+-}
+renderAlert : Context -> Spec.AlertProps -> Html Msg
+renderAlert ctx props =
+    let
+        titleHtml =
+            case props.title of
+                Just expr ->
+                    [ Html.span [ Attr.class "jr-alert__title" ]
+                        [ Html.text (Expr.resolveDisplay ctx expr) ]
+                    ]
+
+                Nothing ->
+                    []
+    in
+    Html.div [ Attr.class ("jr-alert jr-alert--" ++ toneClass props.tone) ]
+        (titleHtml
+            ++ [ Html.span [ Attr.class "jr-alert__message" ]
+                    [ Html.text (Expr.resolveDisplay ctx props.message) ]
+               ]
+        )
+
+
+toneClass : Spec.Tone -> String
+toneClass tone =
+    case tone of
+        Spec.Info ->
+            "info"
+
+        Spec.Warning ->
+            "warning"
+
+        Spec.Danger ->
+            "danger"
 
 
 

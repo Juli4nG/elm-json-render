@@ -16,6 +16,8 @@ module JsonRender.Spec exposing
     , IframeProps
     , TableProps
     , Column
+    , AlertProps
+    , Tone(..)
     , ActionBinding
     , Confirm
     , Repeat
@@ -65,6 +67,8 @@ A rejected manifest never produces a partial tree: the host shows an error stub.
 @docs IframeProps
 @docs TableProps
 @docs Column
+@docs AlertProps
+@docs Tone
 
 
 # Actions & iteration
@@ -117,6 +121,7 @@ type ComponentType
     | GroupedTable
     | Iframe
     | Table
+    | Alert
 
 
 {-| Strictly-decoded props, one variant per component type. The variant always agrees
@@ -133,6 +138,7 @@ type Props
     | GroupedTableP GroupedTableProps
     | IframeP IframeProps
     | TableP TableProps
+    | AlertP AlertProps
 
 
 {-| `Stack` layout direction.
@@ -140,6 +146,15 @@ type Props
 type Direction
     = Row
     | Col
+
+
+{-| `Alert` severity tone, driving the `jr-alert--<tone>` modifier class. Any other
+string fails the decode (fail-closed).
+-}
+type Tone
+    = Info
+    | Warning
+    | Danger
 
 
 {-| `Card` props. `title` is optional and may be any expression.
@@ -221,6 +236,16 @@ type alias Column =
     }
 
 
+{-| `Alert` props: a `tone`, an optional `title` expression, and the required `message`
+expression (which may itself be a `$template` or other binding).
+-}
+type alias AlertProps =
+    { tone : Tone
+    , title : Maybe Expr
+    , message : Expr
+    }
+
+
 {-| An event binding: a named verb, its (unresolved) params, and an optional confirm
 dialog. The key is `action`/`params` per the pinned format, never a URL.
 -}
@@ -283,6 +308,9 @@ componentName ct =
 
         Table ->
             "Table"
+
+        Alert ->
+            "Alert"
 
 
 
@@ -445,6 +473,9 @@ parseComponentType name =
         "Table" ->
             Just Table
 
+        "Alert" ->
+            Just Alert
+
         _ ->
             Nothing
 
@@ -502,6 +533,9 @@ allowedPropKeys ct =
         Table ->
             [ "columns", "bind" ]
 
+        Alert ->
+            [ "tone", "title", "message" ]
+
 
 decodeFromValue : Decoder a -> Value -> Decoder a
 decodeFromValue dec value =
@@ -557,6 +591,12 @@ propsBodyDecoder ct =
                 (Decode.field "columns" (Decode.list columnDecoder))
                 (Decode.field "bind" Expr.decoder)
 
+        Alert ->
+            Decode.map3 (\to ti m -> AlertP (AlertProps to ti m))
+                (Decode.field "tone" toneDecoder)
+                (Decode.maybe (Decode.field "title" Expr.decoder))
+                (Decode.field "message" Expr.decoder)
+
 
 columnDecoder : Decoder Column
 columnDecoder =
@@ -582,6 +622,26 @@ directionDecoder =
 
                     other ->
                         Decode.fail ("Unknown Stack direction: `" ++ other ++ "`")
+            )
+
+
+toneDecoder : Decoder Tone
+toneDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\s ->
+                case s of
+                    "info" ->
+                        Decode.succeed Info
+
+                    "warning" ->
+                        Decode.succeed Warning
+
+                    "danger" ->
+                        Decode.succeed Danger
+
+                    other ->
+                        Decode.fail ("Unknown Alert tone: `" ++ other ++ "`")
             )
 
 
