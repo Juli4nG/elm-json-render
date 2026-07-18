@@ -14,6 +14,8 @@ module JsonRender.Spec exposing
     , CheckboxProps
     , GroupedTableProps
     , IframeProps
+    , TableProps
+    , Column
     , ActionBinding
     , Confirm
     , Repeat
@@ -61,6 +63,8 @@ A rejected manifest never produces a partial tree: the host shows an error stub.
 @docs CheckboxProps
 @docs GroupedTableProps
 @docs IframeProps
+@docs TableProps
+@docs Column
 
 
 # Actions & iteration
@@ -112,6 +116,7 @@ type ComponentType
     | Checkbox
     | GroupedTable
     | Iframe
+    | Table
 
 
 {-| Strictly-decoded props, one variant per component type. The variant always agrees
@@ -127,6 +132,7 @@ type Props
     | CheckboxP CheckboxProps
     | GroupedTableP GroupedTableProps
     | IframeP IframeProps
+    | TableP TableProps
 
 
 {-| `Stack` layout direction.
@@ -197,6 +203,24 @@ type alias IframeProps =
     }
 
 
+{-| `Table` props: the `columns` to show (each a `key`/`label` pair) and a `bind`
+expression resolving to an array of row objects. Each cell reads `row[column.key]`; a
+missing key renders an empty cell.
+-}
+type alias TableProps =
+    { columns : List Column
+    , bind : Expr
+    }
+
+
+{-| One `Table` column: the row-object `key` to read and the header `label` to show.
+-}
+type alias Column =
+    { key : String
+    , label : String
+    }
+
+
 {-| An event binding: a named verb, its (unresolved) params, and an optional confirm
 dialog. The key is `action`/`params` per the pinned format, never a URL.
 -}
@@ -256,6 +280,9 @@ componentName ct =
 
         Iframe ->
             "Iframe"
+
+        Table ->
+            "Table"
 
 
 
@@ -415,6 +442,9 @@ parseComponentType name =
         "Iframe" ->
             Just Iframe
 
+        "Table" ->
+            Just Table
+
         _ ->
             Nothing
 
@@ -469,6 +499,9 @@ allowedPropKeys ct =
         Iframe ->
             [ "src", "title" ]
 
+        Table ->
+            [ "columns", "bind" ]
+
 
 decodeFromValue : Decoder a -> Value -> Decoder a
 decodeFromValue dec value =
@@ -518,6 +551,21 @@ propsBodyDecoder ct =
             Decode.map2 (\s t -> IframeP (IframeProps s t))
                 (Decode.field "src" Expr.decoder)
                 (Decode.field "title" Expr.decoder)
+
+        Table ->
+            Decode.map2 (\c b -> TableP (TableProps c b))
+                (Decode.field "columns" (Decode.list columnDecoder))
+                (Decode.field "bind" Expr.decoder)
+
+
+columnDecoder : Decoder Column
+columnDecoder =
+    rejectUnknownKeys "Table column"
+        [ "key", "label" ]
+        (Decode.map2 Column
+            (Decode.field "key" Decode.string)
+            (Decode.field "label" Decode.string)
+        )
 
 
 directionDecoder : Decoder Direction

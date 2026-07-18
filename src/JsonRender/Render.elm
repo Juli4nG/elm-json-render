@@ -246,6 +246,9 @@ renderComponent ctx element childrenHtml =
         IframeP props ->
             renderIframe ctx props
 
+        TableP props ->
+            renderTable ctx props
+
 
 renderCard : Context -> Spec.CardProps -> List (Html Msg) -> Html Msg
 renderCard ctx props childrenHtml =
@@ -525,6 +528,57 @@ severityRank label =
 
         _ ->
             Nothing
+
+
+
+-- TABLE
+
+
+{-| Render a `Table`: a `<thead>` of column labels and one `<tr>` per bound row. Each cell
+reads `row[column.key]` (a missing key renders empty). The `jr-table` / `jr-table__header`
+/ `jr-table__row` / `jr-table__cell` classes drive host styling.
+-}
+renderTable : Context -> Spec.TableProps -> Html Msg
+renderTable ctx props =
+    let
+        rows =
+            Expr.resolve ctx props.bind |> decodeRows
+    in
+    Html.table [ Attr.class "jr-table" ]
+        [ Html.thead []
+            [ Html.tr [ Attr.class "jr-table__row" ]
+                (List.map headerCell props.columns)
+            ]
+        , Html.tbody []
+            (List.map (bodyRow ctx props.columns) rows)
+        ]
+
+
+headerCell : Spec.Column -> Html Msg
+headerCell column =
+    Html.th [ Attr.class "jr-table__header" ] [ Html.text column.label ]
+
+
+bodyRow : Context -> List Spec.Column -> Dict.Dict String Value -> Html Msg
+bodyRow ctx columns row =
+    Html.tr [ Attr.class "jr-table__row" ]
+        (List.map (bodyCell ctx row) columns)
+
+
+bodyCell : Context -> Dict.Dict String Value -> Spec.Column -> Html Msg
+bodyCell ctx row column =
+    Html.td [ Attr.class "jr-table__cell" ]
+        [ Html.text (cellText ctx (Dict.get column.key row)) ]
+
+
+{-| A cell's display string, reusing the shared literal-display semantics (so numbers /
+booleans / null render exactly as they do for `Text`). A missing column key = "".
+-}
+cellText : Context -> Maybe Value -> String
+cellText ctx maybeValue =
+    maybeValue
+        |> Maybe.map (Expr.ELiteral >> Expr.resolveDisplay ctx)
+        |> Maybe.withDefault ""
 
 
 
