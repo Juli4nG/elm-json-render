@@ -72,6 +72,14 @@ suite =
                 render "https://1-2-3-4.sslip.io/app"
                     |> Query.find [ Selector.tag "iframe" ]
                     |> Query.has [ Selector.style "color-scheme" "light" ]
+        , test "renders the always-on provenance bar naming the embedded origin" <|
+            \_ ->
+                render "https://1-2-3-4.sslip.io/app"
+                    |> Query.find [ Selector.class "jr-iframe__provenance" ]
+                    |> Query.has
+                        [ Selector.text
+                            "Third-party content from https://1-2-3-4.sslip.io — not verified by the host application"
+                        ]
         , test "an https src whose origin is NOT allowlisted renders no iframe" <|
             \_ ->
                 render "https://evil.example.com/app"

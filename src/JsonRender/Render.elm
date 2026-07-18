@@ -43,6 +43,7 @@ import Dict
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events as Events
+import Html.Keyed as Keyed
 import Json.Decode as Decode exposing (Value)
 import Json.Encode as Encode
 import JsonRender.Expr as Expr exposing (Context)
@@ -634,6 +635,13 @@ when it is a well-formed https URL whose origin (scheme + host + port) is an exa
 the host-provided `ctx.allowedOrigins`. Anything else (empty/unresolved src, non-https
 scheme, unparseable URL, or an off-allowlist origin) renders a benign placeholder instead.
 The empty-src case is why the element needs no `visible`: an unresolved binding self-hides.
+
+When it does render, the frame is always preceded by a `jr-iframe__provenance` bar naming
+the embedded origin. The bar is emitted unconditionally by the renderer, with no prop to
+suppress it, so a manifest cannot hide that the content is unverified third-party. The
+`<iframe>` sits inside a `jr-iframe__frame` wrapper meant to carry a distinct border in the
+host stylesheet, and the whole thing is a keyed node so re-renders never reload the iframe.
+
 -}
 renderIframe : Context -> Spec.IframeProps -> Html Msg
 renderIframe ctx props =
@@ -642,33 +650,72 @@ renderIframe ctx props =
             Expr.resolveDisplay ctx props.src
     in
     if isAllowedIframeSrc ctx.allowedOrigins url then
-        Html.iframe
-            [ Attr.src url
-            , Attr.title (Expr.resolveDisplay ctx props.title)
-
-            -- `allow-same-origin` is safe here BECAUSE the origin-pin guarantees the src is
-            -- cross-origin to the host (Exosphere): the sandbox token grants the embedded app
-            -- access to its OWN origin only, never the parent host origin.
-            , Attr.attribute "sandbox" "allow-scripts allow-same-origin allow-forms"
-            , Attr.attribute "referrerpolicy" "no-referrer"
-
-            -- Force the embedded (cross-origin) app to render in light mode regardless of the
-            -- viewer's OS `prefers-color-scheme`. Per the CSS Color Adjustment spec, Chromium
-            -- derives the embedded page's used color-scheme from the embedding iframe element,
-            -- so this pins the embed to light while the host page keeps its own theme. This is
-            -- a presentation-only attribute and does not touch the origin-pin, sandbox, or
-            -- referrerpolicy safety boundary.
-            , Attr.style "color-scheme" "light"
-            , Attr.style "width" "100%"
-            , Attr.style "height" "85vh"
-            , Attr.style "min-height" "600px"
-            , Attr.style "border" "0"
+        -- Keyed so the whole tree re-rendering never remounts (reloads) the live iframe.
+        Keyed.node "div"
+            [ Attr.class "jr-iframe" ]
+            [ ( "provenance", provenanceBar url )
+            , ( "frame"
+              , Html.div [ Attr.class "jr-iframe__frame" ]
+                    [ iframeElement ctx props url ]
+              )
             ]
-            []
 
     else
         Html.div [ Attr.class "jr-iframe--blocked" ]
             [ Html.text "Embedded content is unavailable." ]
+
+
+{-| The always-on provenance chrome: a slim bar naming the embedded origin, rendered above
+the frame. Not suppressible from a manifest. Host stylesheets may restyle `jr-iframe__provenance`
+but the bar is structurally present whenever an iframe renders.
+-}
+provenanceBar : String -> Html Msg
+provenanceBar url =
+    Html.div [ Attr.class "jr-iframe__provenance" ]
+        [ Html.text
+            ("Third-party content from "
+                ++ iframeOrigin url
+                ++ " — not verified by the host application"
+            )
+        ]
+
+
+iframeElement : Context -> Spec.IframeProps -> String -> Html Msg
+iframeElement ctx props url =
+    Html.iframe
+        [ Attr.src url
+        , Attr.title (Expr.resolveDisplay ctx props.title)
+
+        -- `allow-same-origin` is safe here BECAUSE the origin-pin guarantees the src is
+        -- cross-origin to the host (Exosphere): the sandbox token grants the embedded app
+        -- access to its OWN origin only, never the parent host origin.
+        , Attr.attribute "sandbox" "allow-scripts allow-same-origin allow-forms"
+        , Attr.attribute "referrerpolicy" "no-referrer"
+
+        -- Force the embedded (cross-origin) app to render in light mode regardless of the
+        -- viewer's OS `prefers-color-scheme`. Per the CSS Color Adjustment spec, Chromium
+        -- derives the embedded page's used color-scheme from the embedding iframe element,
+        -- so this pins the embed to light while the host page keeps its own theme. This is
+        -- a presentation-only attribute and does not touch the origin-pin, sandbox, or
+        -- referrerpolicy safety boundary.
+        , Attr.style "color-scheme" "light"
+        , Attr.style "width" "100%"
+        , Attr.style "height" "85vh"
+        , Attr.style "min-height" "600px"
+        , Attr.style "border" "0"
+        ]
+        []
+
+
+{-| The origin (scheme + host + port) of a resolved iframe `src`, for the provenance bar.
+Falls back to the full url if unparseable (cannot happen in the allowed branch, where the
+origin-pin has already validated it).
+-}
+iframeOrigin : String -> String
+iframeOrigin url =
+    Url.fromString url
+        |> Maybe.map originOf
+        |> Maybe.withDefault url
 
 
 {-| Fail-closed origin pin: `True` only when `src` is a non-empty, well-formed https URL
