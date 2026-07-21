@@ -95,6 +95,16 @@ suite =
                 render ""
                     |> Query.findAll [ Selector.tag "iframe" ]
                     |> Query.count (Expect.equal 0)
+        , test "an empty (unresolved) src renders NOTHING — no security placeholder (host owns the empty affordance)" <|
+            \_ ->
+                render ""
+                    |> Query.findAll [ Selector.class "jr-iframe--blocked" ]
+                    |> Query.count (Expect.equal 0)
+        , test "a non-empty but disallowed src DOES render the security placeholder" <|
+            \_ ->
+                render "https://evil.example.com/app"
+                    |> Query.find [ Selector.class "jr-iframe--blocked" ]
+                    |> Query.has [ Selector.text "Embedded content is unavailable." ]
         , test "an Iframe with required src + title decodes successfully" <|
             \_ ->
                 JsonRender.decodeString iframeManifest

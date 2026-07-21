@@ -657,9 +657,10 @@ toneClass tone =
 
 {-| Render an `Iframe`, origin-pinned. The resolved `src` is emitted as an `<iframe>` ONLY
 when it is a well-formed https URL whose origin (scheme + host + port) is an exact member of
-the host-provided `ctx.allowedOrigins`. Anything else (empty/unresolved src, non-https
-scheme, unparseable URL, or an off-allowlist origin) renders a benign placeholder instead.
-The empty-src case is why the element needs no `visible`: an unresolved binding self-hides.
+the host-provided `ctx.allowedOrigins`. An **empty / unresolved** `src` renders **nothing** —
+the element self-hides so the host can own the empty/loading/error affordance. A **non-empty
+but disallowed** src (non-https scheme, unparseable URL, or off-allowlist origin) renders a
+benign security placeholder instead.
 
 When it does render, the frame is always preceded by a `jr-iframe__provenance` bar naming
 the embedded origin. The bar is emitted unconditionally by the renderer, with no prop to
@@ -674,7 +675,14 @@ renderIframe ctx props =
         url =
             Expr.resolveDisplay ctx props.src
     in
-    if isAllowedIframeSrc ctx.allowedOrigins url then
+    if String.isEmpty url then
+        -- An empty / unresolved `src` renders NOTHING. The host owns the empty / loading /
+        -- error affordance around the frame; a "content unavailable" placeholder here would
+        -- fight that host chrome. The security placeholder below is reserved for a *non-empty
+        -- but disallowed* src, a genuine off-allowlist signal worth surfacing.
+        Html.text ""
+
+    else if isAllowedIframeSrc ctx.allowedOrigins url then
         -- Keyed so the whole tree re-rendering never remounts (reloads) the live iframe.
         Keyed.node "div"
             [ Attr.class "jr-iframe" ]
