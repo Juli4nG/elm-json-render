@@ -231,7 +231,42 @@ suite =
                     |> clickRowScan
                     |> ProgramTest.clickButton "Cancel"
                     |> ProgramTest.expectModel (\model -> model.lastAction |> Expect.equal Nothing)
+        , test "a Badge with a variant renders the value as text but the variant as data-state" <|
+            \_ ->
+                renderBadgeSpec
+                    """{ "root": "b", "elements": { "b": { "type": "Badge", "props": { "value": { "$state": "/label" }, "variant": { "$state": "/token" } }, "children": [] } } }"""
+                    (Encode.object [ ( "label", Encode.string "Now viewing" ), ( "token", Encode.string "viewing" ) ])
+                    |> Query.has
+                        [ Selector.class "jr-badge"
+                        , Selector.attribute (Html.Attributes.attribute "data-state" "viewing")
+                        , Selector.text "Now viewing"
+                        ]
+        , test "a Badge without a variant uses the value text as data-state (unchanged behavior)" <|
+            \_ ->
+                renderBadgeSpec
+                    """{ "root": "b", "elements": { "b": { "type": "Badge", "props": { "value": { "$state": "/label" } }, "children": [] } } }"""
+                    (Encode.object [ ( "label", Encode.string "Now viewing" ) ])
+                    |> Query.has
+                        [ Selector.class "jr-badge"
+                        , Selector.attribute (Html.Attributes.attribute "data-state" "Now viewing")
+                        , Selector.text "Now viewing"
+                        ]
         ]
+
+
+{-| Render a standalone Badge spec against a state value, returning the root query. Used for the
+`variant` cases, which need their own tiny spec rather than the shared card fixture.
+-}
+renderBadgeSpec : String -> Value -> Query.Single Msg
+renderBadgeSpec specJson state =
+    (case JsonRender.decodeString specJson of
+        Ok spec ->
+            Html.map RendererMsg (Render.view [] spec state Render.init)
+
+        Err message ->
+            Html.text ("decode failed: " ++ message)
+    )
+        |> Query.fromHtml
 
 
 {-| Click the per-row "Scan" button precisely. `clickButton "Scan"` is ambiguous because

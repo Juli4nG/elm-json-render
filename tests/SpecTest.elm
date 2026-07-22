@@ -37,6 +37,34 @@ suite =
                         |> Maybe.andThen (\spec -> Dict.get "row-status" spec.elements)
                         |> Maybe.map .componentType
                         |> Expect.equal (Just Badge)
+            , test "a Badge with no variant decodes with variant = Nothing" <|
+                \_ ->
+                    JsonRender.decodeString Fixtures.cardJson
+                        |> Result.toMaybe
+                        |> Maybe.andThen (\spec -> Dict.get "row-status" spec.elements)
+                        |> Maybe.andThen badgeVariantPresent
+                        |> Expect.equal (Just False)
+            ]
+        , describe "the Badge variant prop"
+            [ test "a Badge with a variant expression decodes (variant present)" <|
+                \_ ->
+                    JsonRender.decodeString badgeWithVariant
+                        |> Result.toMaybe
+                        |> Maybe.andThen (\spec -> Dict.get "r" spec.elements)
+                        |> Maybe.andThen badgeVariantPresent
+                        |> Expect.equal (Just True)
+            , test "a Badge without a variant decodes (variant absent)" <|
+                \_ ->
+                    JsonRender.decodeString badgeWithoutVariant
+                        |> Result.toMaybe
+                        |> Maybe.andThen (\spec -> Dict.get "r" spec.elements)
+                        |> Maybe.andThen badgeVariantPresent
+                        |> Expect.equal (Just False)
+            , test "a Badge with a malformed variant expression fails the decode (fail-closed)" <|
+                \_ ->
+                    JsonRender.decodeString badgeWithMalformedVariant
+                        |> isErr
+                        |> Expect.equal True
             ]
         , describe "fail-closed rejections"
             [ test "an off-catalog component type fails the decode" <|
@@ -121,6 +149,46 @@ suite =
                         |> Expect.equal True
             ]
         ]
+
+
+badgeWithVariant : String
+badgeWithVariant =
+    """
+    { "root": "r"
+    , "elements": { "r": { "type": "Badge", "props": { "value": { "$item": "label" }, "variant": { "$item": "state" } }, "children": [] } }
+    }
+    """
+
+
+badgeWithoutVariant : String
+badgeWithoutVariant =
+    """
+    { "root": "r"
+    , "elements": { "r": { "type": "Badge", "props": { "value": { "$item": "label" } }, "children": [] } }
+    }
+    """
+
+
+badgeWithMalformedVariant : String
+badgeWithMalformedVariant =
+    """
+    { "root": "r"
+    , "elements": { "r": { "type": "Badge", "props": { "value": "x", "variant": { "$computed": "evil" } }, "children": [] } }
+    }
+    """
+
+
+{-| `Just True` when the element is a Badge carrying a `variant`, `Just False` for a Badge
+without one, `Nothing` for a non-Badge element.
+-}
+badgeVariantPresent : Spec.UIElement -> Maybe Bool
+badgeVariantPresent element =
+    case element.props of
+        BadgeP badge ->
+            Just (badge.variant /= Nothing)
+
+        _ ->
+            Nothing
 
 
 cardWithNonObjectProps : String
