@@ -29,6 +29,18 @@ state =
     decode stateJson
 
 
+{-| A fixture with one field per JS `Boolean()` edge case, for the truthiness table.
+-}
+truthyState : Value
+truthyState =
+    decode
+        """
+        { "emptyStr": "", "zeroStr": "0", "zero": 0, "negZero": -0
+        , "nul": null, "arr": [], "obj": {}
+        }
+        """
+
+
 decode : String -> Value
 decode raw =
     case Decode.decodeString Decode.value raw of
@@ -279,6 +291,81 @@ suite =
                     Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"eq\":1,\"neq\":2},\"$then\":\"a\",\"$else\":\"b\"}"
                         |> isErr
                         |> Expect.equal True
+
+            -- Missing-path (JS `undefined`) semantics: distinct from JSON null.
+            , test "eq: null does NOT match a missing path (undefined !== null)" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/missing\",\"eq\":null},\"$then\":\"T\",\"$else\":\"F\"}"
+                        |> Expect.equal "F"
+            , test "eq: null DOES match a present null value (null === null)" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/results\",\"eq\":null},\"$then\":\"T\",\"$else\":\"F\"}"
+                        |> Expect.equal "T"
+            , test "a missing path IS eq to another missing path (via {$state} ref RHS)" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/gone\",\"eq\":{\"$state\":\"/absent\"}},\"$then\":\"T\",\"$else\":\"F\"}"
+                        |> Expect.equal "T"
+            , test "neq is the negation: a missing path IS neq to null" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/missing\",\"neq\":null},\"$then\":\"T\",\"$else\":\"F\"}"
+                        |> Expect.equal "T"
+            , test "an ordering comparison with a missing side is False" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/missing\",\"gt\":0},\"$then\":\"T\",\"$else\":\"F\"}"
+                        |> Expect.equal "F"
+
+            -- Write-back passes through the branch a $cond selects at render time.
+            , test "$cond → $bindState exposes the THEN branch write-back when the condition holds" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder
+                        "{\"$cond\":{\"$state\":\"/instances/1/selected\"},\"$then\":{\"$bindState\":\"/a\"},\"$else\":{\"$bindState\":\"/b\"}}"
+                        |> Result.map (Expr.writeBackPath (Expr.rootContext [] state))
+                        |> Expect.equal (Ok (Just "/a"))
+            , test "$cond → $bindState follows the condition to the ELSE branch" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder
+                        "{\"$cond\":{\"$state\":\"/selectAll\"},\"$then\":{\"$bindState\":\"/a\"},\"$else\":{\"$bindState\":\"/b\"}}"
+                        |> Result.map (Expr.writeBackPath (Expr.rootContext [] state))
+                        |> Expect.equal (Ok (Just "/b"))
+            , test "$cond → $bindItem write-back uses the row basePath" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder
+                        "{\"$cond\":{\"$item\":\"selected\"},\"$then\":{\"$bindItem\":\"scanState\"},\"$else\":{\"$bindItem\":\"name\"}}"
+                        |> Result.map (Expr.writeBackPath (rowCtx 2))
+                        |> Expect.equal (Ok (Just "/instances/2/name"))
+
+            -- Malformed {$state} comparison references fail decode; plain literals do not.
+            , test "a {$state} ref with a non-string pointer fails the decode" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"eq\":{\"$state\":123}},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "a {$state} ref with an extra key fails the decode" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"eq\":{\"$state\":\"/y\",\"junk\":true}},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "a plain object literal (no $state) is a legal eq operand (always False)" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/instances/1/scanState\",\"eq\":{\"foo\":1}},\"$then\":\"t\",\"$else\":\"e\"}"
+                        |> Expect.equal "e"
+
+            -- JS Boolean() truthiness table (no-operator condition).
+            , test "truthiness table: '' 0 -0 null missing → False; '0' [] {} → True" <|
+                \_ ->
+                    let
+                        t path =
+                            cond (Expr.rootContext [] truthyState)
+                                ("{\"$cond\":{\"$state\":\"" ++ path ++ "\"},\"$then\":\"T\",\"$else\":\"F\"}")
+                    in
+                    [ t "/emptyStr", t "/zeroStr", t "/zero", t "/negZero", t "/nul", t "/arr", t "/obj", t "/missing" ]
+                        |> Expect.equal [ "F", "T", "F", "F", "F", "T", "T", "F" ]
             ]
         , describe "writeBackPath"
             [ test "$bindItem write-back path uses the repeat basePath" <|

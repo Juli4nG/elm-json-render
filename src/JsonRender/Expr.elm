@@ -81,7 +81,9 @@ import Json.Encode as Encode
   - `ETemplate tmpl`: `{ "$template": "…${/ptr}…${bare}…" }`, string interpolation.
   - `ECond cond t e`: `{ "$cond": <condition>, "$then": <expr>, "$else": <expr> }`,
     picks `t` when `cond` holds, else `e`. Both branches are themselves expressions
-    (recursive). See [`Condition`](#Condition).
+    (recursive). A two-way `$bindState` / `$bindItem` inside the selected branch keeps its
+    write-back: [`writeBackPath`](#writeBackPath) targets the branch chosen at render time.
+    See [`Condition`](#Condition).
 
 -}
 type Expr
@@ -138,6 +140,11 @@ type CondSource
 {-| The comparison operator. `CmpTruthy` is the no-operator case (JS `Boolean(value)`).
 `eq` / `neq` compare against any value by JSON scalar equality; `gt` / `gte` / `lt` /
 `lte` compare numbers only (a non-numeric operand on either side yields `False`, per core).
+
+A **missing** path (an absent `$state` / `$item` / `$index` source or `{$state}` operand) is
+JS `undefined`, kept distinct from JSON `null`: it is falsy, `eq`-equal only to another
+missing path (`undefined === undefined`; `undefined !== null`), and never orders.
+
 -}
 type Comparison
     = CmpTruthy
@@ -459,24 +466,51 @@ parseNegate pairs =
 {-| Build a [`Comparand`](#Comparand). A `{ "$state": "/ptr" }` object is a state
 reference for any operator (core resolves it at eval time). When `numericOnly` (for
 `gt` / `gte` / `lt` / `lte`), a literal operand must be a number, else the decode fails.
+
+Fail-closed on malformed references: any JSON **object** that carries a `$state` key must
+be exactly the one-key form `{ "$state": "<string>" }` (so `{ "$state": 123 }` or
+`{ "$state": "/x", "junk": true }` fail decode rather than degrading to a literal). A plain
+object / array literal **without** a `$state` key stays a legal literal (`eq` against it is
+then always `False` by the object-inequality rule).
+
 -}
 comparand : Bool -> Value -> Result String Comparand
 comparand numericOnly v =
-    case Decode.decodeValue (Decode.field "$state" Decode.string) v of
-        Ok ptr ->
-            Ok (CStateRef ptr)
+    case Decode.decodeValue (Decode.keyValuePairs Decode.value) v of
+        Ok pairs ->
+            if List.any (Tuple.first >> (==) "$state") pairs then
+                case pairs of
+                    [ ( "$state", ptrValue ) ] ->
+                        case Decode.decodeValue Decode.string ptrValue of
+                            Ok ptr ->
+                                Ok (CStateRef ptr)
 
-        Err _ ->
-            if numericOnly then
-                case Decode.decodeValue Decode.float v of
-                    Ok _ ->
-                        Ok (CLiteral v)
+                            Err _ ->
+                                Err "comparison `{ \"$state\": … }` reference must be a string pointer"
 
-                    Err _ ->
-                        Err "`gt` / `gte` / `lt` / `lte` operand must be a number or `{ \"$state\": … }`"
+                    _ ->
+                        Err "comparison reference must be exactly `{ \"$state\": \"<ptr>\" }`"
 
             else
+                literalComparand numericOnly v
+
+        Err _ ->
+            -- Not an object (scalar / array / null): a plain literal operand.
+            literalComparand numericOnly v
+
+
+literalComparand : Bool -> Value -> Result String Comparand
+literalComparand numericOnly v =
+    if numericOnly then
+        case Decode.decodeValue Decode.float v of
+            Ok _ ->
                 Ok (CLiteral v)
+
+            Err _ ->
+                Err "`gt` / `gte` / `lt` / `lte` operand must be a number or `{ \"$state\": … }`"
+
+    else
+        Ok (CLiteral v)
 
 
 
@@ -685,13 +719,13 @@ evalSingle ctx { source, comparison, negate } =
         result =
             case comparison of
                 CmpTruthy ->
-                    truthy lhs
+                    truthyMaybe lhs
 
                 CmpEq c ->
-                    jsonEq lhs (resolveComparand ctx c)
+                    maybeEq lhs (resolveComparand ctx c)
 
                 CmpNeq c ->
-                    not (jsonEq lhs (resolveComparand ctx c))
+                    not (maybeEq lhs (resolveComparand ctx c))
 
                 CmpGt c ->
                     numCompare (>) lhs (resolveComparand ctx c)
@@ -712,35 +746,47 @@ evalSingle ctx { source, comparison, negate } =
         result
 
 
-resolveSource : Context -> CondSource -> Value
+{-| Resolve a condition's left-hand side. `Nothing` marks a **missing** path (an absent
+`$state` pointer, an `$item` field or item that is not present, or `$index` outside a repeat
+scope) — JS `undefined`, kept distinct from a JSON `null` value (`Just null`).
+-}
+resolveSource : Context -> CondSource -> Maybe Value
 resolveSource ctx source =
     case source of
         SrcState ptr ->
-            getByPath ptr ctx.state |> Maybe.withDefault Encode.null
+            getByPath ptr ctx.state
 
         SrcItem field ->
-            resolveItem ctx field
+            ctx.item |> Maybe.andThen (getByPath field)
 
         SrcIndex ->
-            ctx.index |> Maybe.map Encode.int |> Maybe.withDefault Encode.null
+            ctx.index |> Maybe.map Encode.int
 
 
-resolveComparand : Context -> Comparand -> Value
+{-| Resolve a comparison operand. A `{ "$state": … }` reference is `Nothing` when its path
+is missing (same `undefined` semantics as the left-hand side); a literal is always `Just`.
+-}
+resolveComparand : Context -> Comparand -> Maybe Value
 resolveComparand ctx c =
     case c of
         CLiteral v ->
-            v
+            Just v
 
         CStateRef ptr ->
-            getByPath ptr ctx.state |> Maybe.withDefault Encode.null
+            getByPath ptr ctx.state
 
 
-{-| JS `Boolean(value)`: `null` / `false` / `0` / `""` are falsy; every other scalar and
-any object / array is truthy.
+{-| JS `Boolean(value)` over a possibly-missing value: a missing path is falsy; `null` /
+`false` / `0` / `""` are falsy; every other scalar and any object / array is truthy.
 -}
-truthy : Value -> Bool
-truthy value =
-    Decode.decodeValue truthyDecoder value |> Result.withDefault True
+truthyMaybe : Maybe Value -> Bool
+truthyMaybe maybeValue =
+    case maybeValue of
+        Nothing ->
+            False
+
+        Just value ->
+            Decode.decodeValue truthyDecoder value |> Result.withDefault True
 
 
 truthyDecoder : Decoder Bool
@@ -753,8 +799,28 @@ truthyDecoder =
         ]
 
 
-{-| JS `===` over resolved values: equal only when both sides are the **same** JSON scalar
-(same type and value). Objects and arrays are never equal (core compares by reference).
+{-| JS `===` over possibly-missing values. Two missing paths are equal (`undefined ===
+undefined`); a missing path equals nothing else, not even JSON `null`. Two present values
+compare by [`jsonEq`](#Expr).
+-}
+maybeEq : Maybe Value -> Maybe Value -> Bool
+maybeEq a b =
+    case ( a, b ) of
+        ( Nothing, Nothing ) ->
+            True
+
+        ( Just va, Just vb ) ->
+            jsonEq va vb
+
+        _ ->
+            False
+
+
+{-| JS `===` over two present values: equal only when both are the **same** JSON scalar
+(same type and value). Objects and arrays are never equal here. This is an intentional
+divergence from JS, whose `===` returns `true` when both sides resolve to the same object
+reference (e.g. the same `$state` pointer on both sides); we do not emulate reference
+identity.
 -}
 jsonEq : Value -> Value -> Bool
 jsonEq a b =
@@ -789,11 +855,11 @@ scalarDecoder =
 
 
 {-| A numeric comparison (`gt` / `gte` / `lt` / `lte`) is `False` unless both operands are
-numbers, mirroring core.
+present and both are numbers, mirroring core. A missing path on either side is `False`.
 -}
-numCompare : (Float -> Float -> Bool) -> Value -> Value -> Bool
+numCompare : (Float -> Float -> Bool) -> Maybe Value -> Maybe Value -> Bool
 numCompare op a b =
-    case ( toNum a, toNum b ) of
+    case ( Maybe.andThen toNum a, Maybe.andThen toNum b ) of
         ( Just x, Just y ) ->
             op x y
 
@@ -829,7 +895,9 @@ resolveBool ctx expr =
 
 {-| The absolute JSON Pointer a two-way binding writes back to, or `Nothing` for
 read-only expressions. `$bindState` writes its own pointer; `$bindItem` writes
-`basePath ++ "/" ++ field`.
+`basePath ++ "/" ++ field`. A `$cond` passes through to the branch it selects at render
+time (see [`Expr`](#Expr)), so a `$bindState` / `$bindItem` inside the chosen branch keeps
+its write-back handler.
 -}
 writeBackPath : Context -> Expr -> Maybe String
 writeBackPath ctx expr =
@@ -847,6 +915,13 @@ writeBackPath ctx expr =
                         else
                             base ++ "/" ++ field
                     )
+
+        ECond condition ifThen ifElse ->
+            if evalCondition ctx condition then
+                writeBackPath ctx ifThen
+
+            else
+                writeBackPath ctx ifElse
 
         _ ->
             Nothing
