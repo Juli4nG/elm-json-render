@@ -32,7 +32,7 @@ is fail-open here (warns + renders `null`); we are not.
 | `{ "$bindState": "/ptr" }`  | ✅ | two-way; write-back = the pointer |
 | `{ "$bindItem": "field" }`  | ✅ | two-way; write-back = `basePath ++ "/" ++ field` (whole-item `""` → `basePath`, no trailing slash) |
 | `{ "$template": "…${/ptr}…${bare}…" }` | ✅ | `${/abs}` → state; `${bare}` → item-first then state |
-| `{ "$cond": …, "$then": …, "$else": … }` | ❌ | **rejected at decode.** Not needed by the v1 subset; add when a manifest needs it. |
+| `{ "$cond": …, "$then": …, "$else": … }` | ✅ | Core's conditional. `$cond` is the full `VisibilityCondition` grammar (`$state`/`$item`/`$index` sources; `eq`/`neq`/`gt`/`gte`/`lt`/`lte`/`not`; `{$state}` operand refs; bare-array/`$and`/`$or` composition). Both branches are expressions (recursive). Must carry exactly `$cond`/`$then`/`$else`; malformed conditions fail-closed. |
 | `{ "$computed": "fn", "args": … }` | ❌ | **rejected at decode.** Needs a host function registry; out of scope for v1. |
 | unknown `$foo` directive    | ❌ | **rejected at decode** (stock json-render is fail-open and keeps it verbatim; we fail-closed). |
 | directive object with extra non-`$` siblings | ❌ | **rejected**: a directive must be the only key, else its siblings would be silently dropped. |
@@ -42,7 +42,7 @@ is fail-open here (warns + renders `null`); we are not.
 | Field | Supported | Notes |
 |-------|-----------|-------|
 | `type` / `props` / `children` / `on` / `repeat` | ✅ | |
-| `visible` | ❌ | **rejected at decode.** json-render's `VisibilityCondition` is not implemented; a manifest relying on `visible` to hide a control must fail closed rather than render it unconditionally. |
+| `visible` | ❌ | **rejected at decode.** The `VisibilityCondition` grammar itself is now implemented (see `$cond` above), but it is not yet wired as an element-level `visible`/`hidden` gate; a manifest relying on `visible` to hide a control must fail closed rather than render it unconditionally. |
 | `watch`   | ❌ | **rejected at decode.** Not used by the v1 subset. |
 
 ## Actions

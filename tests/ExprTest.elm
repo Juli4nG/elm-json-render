@@ -56,6 +56,19 @@ encode =
     Encode.encode 0
 
 
+{-| Decode a `$cond` (or any expression) and resolve it to its display string in `ctx`.
+Returns `"DECODE_ERR"` if the manifest fails to decode, so happy-path tests read cleanly.
+-}
+cond : Expr.Context -> String -> String
+cond ctx raw =
+    case Decode.decodeString Expr.decoder raw of
+        Ok expr ->
+            Expr.resolveDisplay ctx expr
+
+        Err _ ->
+            "DECODE_ERR"
+
+
 suite : Test
 suite =
     describe "JsonRender.Expr"
@@ -108,7 +121,7 @@ suite =
                         |> Expect.equal (Ok "\"hello\"")
             , test "unsupported $-directive fails the decode (fail-closed)" <|
                 \_ ->
-                    Decode.decodeString Expr.decoder "{\"$cond\":true,\"$then\":1,\"$else\":2}"
+                    Decode.decodeString Expr.decoder "{\"$computed\":\"fn\",\"args\":{}}"
                         |> isErr
                         |> Expect.equal True
             , test "$index with a non-true value fails" <|
@@ -156,6 +169,116 @@ suite =
                     Expr.resolveDisplay (Expr.rootContext [] state)
                         (ETemplate "all=${/selectAll}")
                         |> Expect.equal "all=false"
+            ]
+        , describe "$cond ($cond/$then/$else)"
+            [ test "a truthy $state condition picks $then" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/instances/1/selected\"},\"$then\":\"YES\",\"$else\":\"NO\"}"
+                        |> Expect.equal "YES"
+            , test "a falsy $state condition picks $else" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/selectAll\"},\"$then\":\"ALL\",\"$else\":\"SOME\"}"
+                        |> Expect.equal "SOME"
+            , test "eq compares a string state value" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/instances/1/scanState\",\"eq\":\"running\"},\"$then\":\"go\",\"$else\":\"stop\"}"
+                        |> Expect.equal "go"
+            , test "eq is type-sensitive on a number ($index === 2)" <|
+                \_ ->
+                    cond (rowCtx 2)
+                        "{\"$cond\":{\"$index\":true,\"eq\":2},\"$then\":\"two\",\"$else\":\"other\"}"
+                        |> Expect.equal "two"
+            , test "gt compares numbers ($index > 1)" <|
+                \_ ->
+                    ( cond (rowCtx 2) "{\"$cond\":{\"$index\":true,\"gt\":1},\"$then\":\"late\",\"$else\":\"early\"}"
+                    , cond (rowCtx 0) "{\"$cond\":{\"$index\":true,\"gt\":1},\"$then\":\"late\",\"$else\":\"early\"}"
+                    )
+                        |> Expect.equal ( "late", "early" )
+            , test "not inverts the truthiness test" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/selectAll\",\"not\":true},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> Expect.equal "a"
+            , test "$or is a disjunction" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$or\":[{\"$state\":\"/selectAll\"},{\"$state\":\"/instances/1/selected\"}]},\"$then\":\"y\",\"$else\":\"n\"}"
+                        |> Expect.equal "y"
+            , test "$and is a conjunction" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$and\":[{\"$state\":\"/instances/1/selected\"},{\"$state\":\"/instances/0/selected\"}]},\"$then\":\"y\",\"$else\":\"n\"}"
+                        |> Expect.equal "n"
+            , test "a bare array is an implicit AND" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":[{\"$state\":\"/instances/1/selected\"},{\"$state\":\"/instances/0/selected\",\"not\":true}],\"$then\":\"y\",\"$else\":\"n\"}"
+                        |> Expect.equal "y"
+            , test "a comparison RHS may be a {$state} reference" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/instances/1/scanState\",\"eq\":{\"$state\":\"/instances/1/scanState\"}},\"$then\":\"same\",\"$else\":\"diff\"}"
+                        |> Expect.equal "same"
+            , test "$item sources the current repeat item" <|
+                \_ ->
+                    ( cond (rowCtx 2) "{\"$cond\":{\"$item\":\"scanState\",\"eq\":\"done\"},\"$then\":\"done\",\"$else\":\"pending\"}"
+                    , cond (rowCtx 0) "{\"$cond\":{\"$item\":\"scanState\",\"eq\":\"done\"},\"$then\":\"done\",\"$else\":\"pending\"}"
+                    )
+                        |> Expect.equal ( "done", "pending" )
+            , test "a branch may itself be a $cond (recursive)" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/selectAll\"},\"$then\":\"all\",\"$else\":{\"$cond\":{\"$state\":\"/instances/1/selected\"},\"$then\":\"some\",\"$else\":\"none\"}}"
+                        |> Expect.equal "some"
+            , test "a non-scalar source is never eq to a scalar → $else" <|
+                \_ ->
+                    cond (Expr.rootContext [] state)
+                        "{\"$cond\":{\"$state\":\"/instances\",\"eq\":\"x\"},\"$then\":\"t\",\"$else\":\"e\"}"
+                        |> Expect.equal "e"
+            , test "$cond resolves inside action params" <|
+                \_ ->
+                    Expr.resolveParams (Expr.rootContext [] state)
+                        (decode "{\"label\":{\"$cond\":{\"$state\":\"/selectAll\"},\"$then\":\"All\",\"$else\":\"Some\"}}")
+                        |> encode
+                        |> Expect.equal "{\"label\":\"Some\"}"
+            , test "a missing $else branch fails the decode (fail-closed)" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":true,\"$then\":\"a\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "an extra key beyond the triple fails the decode" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":true,\"$then\":\"a\",\"$else\":\"b\",\"x\":1}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "an unknown condition operator fails the decode" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"approx\":1},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "mixing two condition sources fails the decode" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"$item\":\"y\"},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "a non-true `not` fails the decode" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"not\":false},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "a non-numeric gt operand fails the decode" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"gt\":\"5\"},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "two comparison operators fail the decode" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"eq\":1,\"neq\":2},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
             ]
         , describe "writeBackPath"
             [ test "$bindItem write-back path uses the repeat basePath" <|
