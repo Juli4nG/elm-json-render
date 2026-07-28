@@ -172,6 +172,27 @@ suite =
                     JsonRender.decodeString confirmNonStringLabel
                         |> isErr
                         |> Expect.equal True
+            , test "a non-string confirm `cancelLabel` fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString confirmNonStringCancelLabel
+                        |> isErr
+                        |> Expect.equal True
+            , test "an explicit-null `confirm` fails the decode (optional, not nullable)" <|
+                -- Pins the null semantics of the `optionalField` conversions: the pinned
+                -- format models these fields as optional — absent or well-formed — so a
+                -- present JSON null is malformed input, not a fancy way to omit.
+                \_ ->
+                    JsonRender.decodeString confirmExplicitNull
+                        |> isErr
+                        |> Expect.equal True
+            , test "an explicit-null Card `title` still decodes (Expr-valued: null is a literal)" <|
+                -- The counterpart boundary: Expr-valued optionals (Card/Alert title,
+                -- Checkbox label/checked) accept null as `ELiteral null`, exactly as
+                -- before the conversions.
+                \_ ->
+                    JsonRender.decodeString cardExplicitNullTitle
+                        |> isErr
+                        |> Expect.equal False
             , test "a malformed `repeat` fails the decode, not a once-rendered element" <|
                 \_ ->
                     JsonRender.decodeString repeatMalformedStatePath
@@ -274,6 +295,45 @@ confirmNonStringLabel =
                 { "title": "Sure?", "message": "Go?", "confirmLabel": 5 } } }
             }
         }
+    }
+    """
+
+
+confirmNonStringCancelLabel : String
+confirmNonStringCancelLabel =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": { "action": "go", "confirm":
+                { "title": "Sure?", "message": "Go?", "cancelLabel": 5 } } }
+            }
+        }
+    }
+    """
+
+
+confirmExplicitNull : String
+confirmExplicitNull =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": { "action": "go", "confirm": null } }
+            }
+        }
+    }
+    """
+
+
+cardExplicitNullTitle : String
+cardExplicitNullTitle =
+    """
+    { "root": "r"
+    , "elements":
+        { "r": { "type": "Card", "props": { "title": null }, "children": [] } }
     }
     """
 

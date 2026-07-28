@@ -363,12 +363,14 @@ badgeTone state =
             "neutral"
 
 
-{-| The leading token of a badge value: everything before the first space. So `"running · 0:15"`
-tones as `"running"` while a plain `"done"` is unchanged.
+{-| The leading token of a badge value: the first whitespace-delimited word. So `"running · 0:15"`
+tones as `"running"` while a plain `"done"` is unchanged. `String.words` (rather than a split on
+`" "`) also normalizes tabs, newlines and leading whitespace, so `" running"` still tones as
+`"running"`; an all-whitespace value falls back to itself (neutral).
 -}
 badgeToken : String -> String
 badgeToken state =
-    state |> String.split " " |> List.head |> Maybe.withDefault state
+    state |> String.words |> List.head |> Maybe.withDefault state
 
 
 renderButton : Context -> UIElement -> Spec.ButtonProps -> Html Msg
