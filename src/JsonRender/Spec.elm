@@ -458,7 +458,7 @@ elementBodyDecoder =
                             (propsDecoder ct)
                             (optionalField "children" (Decode.list Decode.string) [])
                             (optionalField "on" (Decode.dict actionBindingsDecoder) Dict.empty)
-                            (Decode.maybe (Decode.field "repeat" repeatDecoder))
+                            (optionalField "repeat" (Decode.map Just repeatDecoder) Nothing)
 
                     Nothing ->
                         Decode.fail ("Unknown / off-catalog component type: `" ++ name ++ "`")
@@ -487,6 +487,12 @@ parseComponentType name =
             Just Checkbox
 
         "GroupedTable" ->
+            Just GroupedTable
+
+        -- Deprecated wire-name alias: `GroupedTable` was called `FindingsTable` before
+        -- 2.0.0. Kept so a pre-2.0.0 manifest still decodes (fail-closed means the rename
+        -- would otherwise reject the whole manifest, not just the one element).
+        "FindingsTable" ->
             Just GroupedTable
 
         "Iframe" ->
@@ -580,7 +586,7 @@ propsBodyDecoder ct =
     case ct of
         Card ->
             Decode.map (CardP << CardProps)
-                (Decode.maybe (Decode.field "title" Expr.decoder))
+                (optionalField "title" (Decode.map Just Expr.decoder) Nothing)
 
         Stack ->
             Decode.map2 (\d g -> StackP (StackProps d g))
@@ -602,8 +608,8 @@ propsBodyDecoder ct =
 
         Checkbox ->
             Decode.map2 (\l c -> CheckboxP (CheckboxProps l c))
-                (Decode.maybe (Decode.field "label" Expr.decoder))
-                (Decode.maybe (Decode.field "checked" Expr.decoder))
+                (optionalField "label" (Decode.map Just Expr.decoder) Nothing)
+                (optionalField "checked" (Decode.map Just Expr.decoder) Nothing)
 
         GroupedTable ->
             Decode.map2 (\b g -> GroupedTableP (GroupedTableProps b g))
@@ -623,7 +629,7 @@ propsBodyDecoder ct =
         Alert ->
             Decode.map3 (\to ti m -> AlertP (AlertProps to ti m))
                 (Decode.field "tone" toneDecoder)
-                (Decode.maybe (Decode.field "title" Expr.decoder))
+                (optionalField "title" (Decode.map Just Expr.decoder) Nothing)
                 (Decode.field "message" Expr.decoder)
 
         Disclosure ->
@@ -685,7 +691,7 @@ repeatDecoder =
         [ "statePath", "key" ]
         (Decode.map2 Repeat
             (Decode.field "statePath" Decode.string)
-            (Decode.maybe (Decode.field "key" Decode.string))
+            (optionalField "key" (Decode.map Just Decode.string) Nothing)
         )
 
 
@@ -722,7 +728,7 @@ actionBindingDecoder =
         (Decode.map3 ActionBinding
             (Decode.field "action" Decode.string)
             (optionalField "params" Expr.validatedParams (Encode.object []))
-            (Decode.maybe (Decode.field "confirm" confirmDecoder))
+            (optionalField "confirm" (Decode.map Just confirmDecoder) Nothing)
         )
 
 
@@ -733,8 +739,8 @@ confirmDecoder =
         (Decode.map5 Confirm
             (Decode.field "title" Expr.decoder)
             (Decode.field "message" Expr.decoder)
-            (Decode.maybe (Decode.field "confirmLabel" Decode.string))
-            (Decode.maybe (Decode.field "cancelLabel" Decode.string))
+            (optionalField "confirmLabel" (Decode.map Just Decode.string) Nothing)
+            (optionalField "cancelLabel" (Decode.map Just Decode.string) Nothing)
             (optionalField "variant" Decode.string "default")
         )
 

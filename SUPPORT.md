@@ -2,7 +2,7 @@
 
 `elm-json-render` implements the json-render **wire format** pinned to
 `@json-render/core` v0.19.0 (`contract/pinned-format-reference.md`), **scoped to a
-practical v1 subset**. This file records exactly what is and isn't supported, and
+practical subset**. This file records exactly what is and isn't supported, and
 where the renderer deliberately diverges from stock json-render. Per the package's
 fail-closed stance, "not supported" almost always means **the decoder rejects it**, not
 "silently ignored".
@@ -14,13 +14,20 @@ fail-closed stance, "not supported" almost always means **the decoder rejects it
 | `Card`          | ✅ | optional `title` expr |
 | `Stack`         | ✅ | `direction` (`row`/`col`), `gap`; carries `repeat` |
 | `Text`          | ✅ | required `value` expr |
-| `Badge`         | ✅ | `value` expr; tone map idle→neutral, queued/running→info, done→success, error→danger |
+| `Badge`         | ✅ | `value` expr; optional `variant` expr drives the `data-state` styling token (the tone class stays keyed on the display text). Tone map idle→neutral, queued/running→info, done→success, error→danger, keyed on the leading whitespace-delimited token |
 | `Button`        | ✅ | `label` expr; `on.press` action |
 | `Checkbox`      | ✅ | optional `label`, optional two-way `checked` |
 | `GroupedTable`  | ⚠️ | `bind` + `groupBy`; renders empty-state when `null`, else groups by field. The row-payload schema is intentionally loose; the table groups rows by a string field and counts them. |
+| `Table`         | ✅ | required `columns` (each exactly `key` + `label`) + `bind`; renders a plain row table |
+| `Alert`         | ✅ | required `tone` (`info`/`warning`/`danger`) + `message` expr; optional `title` expr |
+| `Disclosure`    | ✅ | required `label` expr; optional `open` bool (default `false`) |
+| `Iframe`        | ⚠️ | required `src` + `title` exprs. **Origin-pinned**: an `<iframe>` is emitted only for an https `src` whose origin is an exact member of the host-supplied allowlist passed to `Render.view`; anything else self-hides or renders a placeholder. An always-on provenance bar is not suppressible from a manifest |
 
 An **unknown component `type` fails the decode** (fail-closed). json-render's own renderer
 is fail-open here (warns + renders `null`); we are not.
+
+`FindingsTable` is accepted as a **deprecated wire-name alias for `GroupedTable`** (its name
+before 2.0.0), so a pre-2.0.0 manifest still decodes rather than being rejected wholesale.
 
 ## Expression / binding forms
 
@@ -68,6 +75,11 @@ so unsupported contract surface fails closed rather than rendering with silently
 semantics. Enforced via `rejectUnknownKeys` on: **element** (`type`/`props`/`children`/
 `on`/`repeat`), **props** (per-component allowlist, e.g. a stray `disabled` on a Button
 fails), **action binding** (`action`/`params`/`confirm`), **confirm**, and **repeat**.
+
+**Optional fields fail closed too.** An optional field that is *present but malformed* is
+rejected, never decoded as absent: a `confirm` block missing its `message`, a malformed
+`repeat`, a `$computed` in a Checkbox `checked` or an Alert `title` all fail the decode
+rather than silently degrading to a button with no dialog or an element rendered once.
 
 ## Deviations from the contract / stock json-render
 

@@ -12,8 +12,8 @@ or it is rejected with a diagnostic and nothing renders. There is no `innerHTML`
 escape hatch, and no "unknown component, skip it" fallback. If you are rendering UI you did
 not write yourself, that strictness is the point.
 
-**Status:** v1. Decoders, expression and binding resolution, renderers, a small TEA host
-interface, 54 passing tests, a runnable demo, and a browser-based conformance snapshot.
+**Status:** v2. Decoders, expression and binding resolution, renderers, a small TEA host
+interface, 144 passing tests, a runnable demo, and a browser-based conformance snapshot.
 Pinned to the wire format of `@json-render/core` v0.19.0.
 
 ## Why
@@ -140,10 +140,20 @@ view : Model -> Html Msg
 view model =
     case model.spec of
         Ok spec ->
-            Html.map RendererMsg (Render.view spec model.hostState model.renderer)
+            Html.map RendererMsg
+                (Render.view allowedOrigins spec model.hostState model.renderer)
 
         Err message ->
             JsonRender.errorStub message
+
+
+{-| The iframe origin allowlist. An `Iframe` element renders only when its resolved `src`
+is an https URL whose origin is an exact member of this list. Keep it `[]` unless you
+deliberately embed something.
+-}
+allowedOrigins : List String
+allowedOrigins =
+    []
 ```
 
 The renderer emits plain `Html` with `jr-*` classes and no styling of its own; you supply
@@ -175,15 +185,17 @@ Every action surfaces to the host as an `Effect`, and the host decides what runs
   `errorStub` (the failure view).
 - `JsonRender.Spec`: the typed spec model and its decoders.
 - `JsonRender.Expr`: the expression dialect (`$state`, `$item`, `$index`, `$bindState`,
-  `$bindItem`, `$template`) with RFC 6901 JSON Pointer resolution.
+  `$bindItem`, `$template`, `$cond`) with RFC 6901 JSON Pointer resolution.
 - `JsonRender.Render`: the TEA renderer (`Model` / `init` / `Msg` / `update` / `Effect` /
   `view`).
 
-## Supported subset (v1)
+## Supported subset
 
 Components: `Card`, `Stack`, `Text`, `Badge`, `Button`, `Checkbox`, `GroupedTable`
-(a grouped summary table), plus the `repeat` field for iterating a state array. Expressions:
-the six `$` forms listed above. Anything outside this subset fails the decode.
+(a grouped summary table), `Table`, `Alert`, `Disclosure`, and `Iframe` (origin-pinned to a
+host-supplied allowlist), plus the `repeat` field for iterating a state array. Expressions:
+the seven `$` forms listed above, `$cond` included. Anything outside this subset fails the
+decode.
 
 See [`SUPPORT.md`](SUPPORT.md) for the full support matrix: exactly which json-render forms
 are accepted, which are rejected, and where this renderer deliberately diverges from the
@@ -194,7 +206,7 @@ stock ones.
 ```sh
 elm make                                          # type-check the package
 elm-format --validate src/ tests/
-elm-test-rs                                       # unit + program tests (54 tests)
+elm-test-rs                                       # unit + program tests (144 tests)
 cd conformance && npm install && npm run capture  # demo build + golden snapshot
 ```
 

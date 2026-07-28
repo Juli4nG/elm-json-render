@@ -148,7 +148,219 @@ suite =
                         |> isErr
                         |> Expect.equal True
             ]
+        , describe "present-but-malformed OPTIONAL fields (no silent drop)"
+            -- An optional field that is present but malformed must fail the decode, not
+            -- decode to `Nothing`. Dropping it silently degrades the manifest's declared
+            -- semantics (a confirm dialog that never appears, a repeat that renders once).
+            [ test "a confirm block missing its required `message` fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString confirmMissingMessage
+                        |> isErr
+                        |> Expect.equal True
+            , test "a non-object `confirm` (true) fails the decode, not a no-dialog button" <|
+                \_ ->
+                    JsonRender.decodeString confirmLiteralTrue
+                        |> isErr
+                        |> Expect.equal True
+            , test "a confirm `message` carrying $computed fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString confirmComputedMessage
+                        |> isErr
+                        |> Expect.equal True
+            , test "a non-string confirm `confirmLabel` fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString confirmNonStringLabel
+                        |> isErr
+                        |> Expect.equal True
+            , test "a malformed `repeat` fails the decode, not a once-rendered element" <|
+                \_ ->
+                    JsonRender.decodeString repeatMalformedStatePath
+                        |> isErr
+                        |> Expect.equal True
+            , test "a non-object `repeat` (true) fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString repeatLiteralTrue
+                        |> isErr
+                        |> Expect.equal True
+            , test "a non-string repeat `key` fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString repeatNonStringKey
+                        |> isErr
+                        |> Expect.equal True
+            , test "a malformed Checkbox `checked` binding fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString checkboxMalformedChecked
+                        |> isErr
+                        |> Expect.equal True
+            , test "a malformed Checkbox `label` fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString checkboxMalformedLabel
+                        |> isErr
+                        |> Expect.equal True
+            , test "a malformed Alert `title` fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString alertMalformedTitle
+                        |> isErr
+                        |> Expect.equal True
+            , test "a malformed Card `title` fails the decode" <|
+                \_ ->
+                    JsonRender.decodeString cardMalformedTitle
+                        |> isErr
+                        |> Expect.equal True
+            ]
+        , describe "the FindingsTable wire-name alias (pre-2.0.0 compatibility)"
+            [ test "a `FindingsTable` element decodes as a GroupedTable" <|
+                \_ ->
+                    JsonRender.decodeString findingsTableAlias
+                        |> Result.toMaybe
+                        |> Maybe.andThen (\spec -> Dict.get "t" spec.elements)
+                        |> Maybe.map .componentType
+                        |> Expect.equal (Just GroupedTable)
+            ]
         ]
+
+
+confirmMissingMessage : String
+confirmMissingMessage =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": { "action": "go", "confirm": { "title": "Sure?" } } }
+            }
+        }
+    }
+    """
+
+
+confirmLiteralTrue : String
+confirmLiteralTrue =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": { "action": "go", "confirm": true } }
+            }
+        }
+    }
+    """
+
+
+confirmComputedMessage : String
+confirmComputedMessage =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": { "action": "go", "confirm":
+                { "title": "Sure?", "message": { "$computed": "evil" } } } }
+            }
+        }
+    }
+    """
+
+
+confirmNonStringLabel : String
+confirmNonStringLabel =
+    """
+    { "root": "r"
+    , "elements":
+        { "r":
+            { "type": "Button", "props": { "label": "x" }, "children": []
+            , "on": { "press": { "action": "go", "confirm":
+                { "title": "Sure?", "message": "Go?", "confirmLabel": 5 } } }
+            }
+        }
+    }
+    """
+
+
+repeatMalformedStatePath : String
+repeatMalformedStatePath =
+    """
+    { "root": "r"
+    , "elements":
+        { "r": { "type": "Stack", "props": {}, "repeat": { "statePath": 5 }, "children": ["t"] }
+        , "t": { "type": "Text", "props": { "value": "x" }, "children": [] }
+        }
+    }
+    """
+
+
+repeatLiteralTrue : String
+repeatLiteralTrue =
+    """
+    { "root": "r"
+    , "elements":
+        { "r": { "type": "Stack", "props": {}, "repeat": true, "children": ["t"] }
+        , "t": { "type": "Text", "props": { "value": "x" }, "children": [] }
+        }
+    }
+    """
+
+
+repeatNonStringKey : String
+repeatNonStringKey =
+    """
+    { "root": "r"
+    , "elements":
+        { "r": { "type": "Stack", "props": {}, "repeat": { "statePath": "/xs", "key": 7 }, "children": ["t"] }
+        , "t": { "type": "Text", "props": { "value": "x" }, "children": [] }
+        }
+    }
+    """
+
+
+checkboxMalformedChecked : String
+checkboxMalformedChecked =
+    """
+    { "root": "r"
+    , "elements":
+        { "r": { "type": "Checkbox", "props": { "label": "x", "checked": { "$computed": "evil" } }, "children": [] } }
+    }
+    """
+
+
+checkboxMalformedLabel : String
+checkboxMalformedLabel =
+    """
+    { "root": "r"
+    , "elements":
+        { "r": { "type": "Checkbox", "props": { "label": { "$computed": "evil" } }, "children": [] } }
+    }
+    """
+
+
+alertMalformedTitle : String
+alertMalformedTitle =
+    """
+    { "root": "r"
+    , "elements":
+        { "r": { "type": "Alert", "props": { "tone": "info", "title": { "$computed": "evil" }, "message": "m" }, "children": [] } }
+    }
+    """
+
+
+cardMalformedTitle : String
+cardMalformedTitle =
+    """
+    { "root": "r"
+    , "elements": { "r": { "type": "Card", "props": { "title": { "$computed": "evil" } }, "children": [] } }
+    }
+    """
+
+
+findingsTableAlias : String
+findingsTableAlias =
+    """
+    { "root": "t"
+    , "elements":
+        { "t": { "type": "FindingsTable", "props": { "bind": { "$state": "/results" } }, "children": [] } }
+    }
+    """
 
 
 badgeWithVariant : String

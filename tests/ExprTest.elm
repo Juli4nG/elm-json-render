@@ -292,6 +292,29 @@ suite =
                         |> isErr
                         |> Expect.equal True
 
+            -- A directive-shaped comparand must not decode to an inert literal: that would
+            -- make the branch permanently False instead of surfacing the unsupported form.
+            , test "a $computed comparand fails the decode (not an inert literal)" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"eq\":{\"$computed\":\"x\"}},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "an $item comparand fails the decode (not an inert literal)" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"eq\":{\"$item\":\"kind\"}},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal True
+            , test "a well-formed { $state } comparand still decodes" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"eq\":{\"$state\":\"/x\"}},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal False
+            , test "a plain object comparand (no $-key) still decodes as a literal" <|
+                \_ ->
+                    Decode.decodeString Expr.decoder "{\"$cond\":{\"$state\":\"/x\",\"eq\":{\"plain\":1}},\"$then\":\"a\",\"$else\":\"b\"}"
+                        |> isErr
+                        |> Expect.equal False
+
             -- Missing-path (JS `undefined`) semantics: distinct from JSON null.
             , test "eq: null does NOT match a missing path (undefined !== null)" <|
                 \_ ->

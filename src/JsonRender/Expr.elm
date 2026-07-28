@@ -139,7 +139,8 @@ type CondSource
 
 {-| The comparison operator. `CmpTruthy` is the no-operator case (JS `Boolean(value)`).
 `eq` / `neq` compare against any value by JSON scalar equality; `gt` / `gte` / `lt` /
-`lte` compare numbers only (a non-numeric operand on either side yields `False`, per core).
+`lte` compare numbers only: a non-numeric literal operand is **rejected at decode**, and a
+non-numeric source value yields `False` at eval time (per core).
 
 A **missing** path (an absent `$state` / `$item` / `$index` source or `{$state}` operand) is
 JS `undefined`, kept distinct from JSON `null`: it is falsy, `eq`-equal only to another
@@ -467,18 +468,20 @@ parseNegate pairs =
 reference for any operator (core resolves it at eval time). When `numericOnly` (for
 `gt` / `gte` / `lt` / `lte`), a literal operand must be a number, else the decode fails.
 
-Fail-closed on malformed references: any JSON **object** that carries a `$state` key must
-be exactly the one-key form `{ "$state": "<string>" }` (so `{ "$state": 123 }` or
-`{ "$state": "/x", "junk": true }` fail decode rather than degrading to a literal). A plain
-object / array literal **without** a `$state` key stays a legal literal (`eq` against it is
-then always `False` by the object-inequality rule).
+Fail-closed on malformed references: any JSON **object** that carries a `$`-prefixed key
+must be exactly the one-key form `{ "$state": "<string>" }`. So `{ "$state": 123 }`,
+`{ "$state": "/x", "junk": true }`, and any other directive-shaped operand
+(`{ "$computed": … }`, `{ "$item": … }`) fail the decode rather than degrading to an inert
+literal that would make the branch permanently `False`. A plain object / array literal with
+**no** `$`-prefixed key stays a legal literal (`eq` against it is then always `False` by the
+object-inequality rule).
 
 -}
 comparand : Bool -> Value -> Result String Comparand
 comparand numericOnly v =
     case Decode.decodeValue (Decode.keyValuePairs Decode.value) v of
         Ok pairs ->
-            if List.any (Tuple.first >> (==) "$state") pairs then
+            if List.any (Tuple.first >> String.startsWith "$") pairs then
                 case pairs of
                     [ ( "$state", ptrValue ) ] ->
                         case Decode.decodeValue Decode.string ptrValue of

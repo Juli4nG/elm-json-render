@@ -338,10 +338,12 @@ renderBadge ctx props =
 
 
 {-| Maps common status strings to a tone class; unrecognized values fall back to neutral.
+Keyed on the leading whitespace-delimited token so a value carrying a trailing detail suffix
+(e.g. `"running · 0:15"`, a counting-up elapsed) still maps to its state tone.
 -}
 badgeTone : String -> String
 badgeTone state =
-    case state of
+    case badgeToken state of
         "idle" ->
             "neutral"
 
@@ -359,6 +361,14 @@ badgeTone state =
 
         _ ->
             "neutral"
+
+
+{-| The leading token of a badge value: everything before the first space. So `"running · 0:15"`
+tones as `"running"` while a plain `"done"` is unchanged.
+-}
+badgeToken : String -> String
+badgeToken state =
+    state |> String.split " " |> List.head |> Maybe.withDefault state
 
 
 renderButton : Context -> UIElement -> Spec.ButtonProps -> Html Msg
@@ -677,7 +687,7 @@ When it does render, the frame is always preceded by a `jr-iframe__provenance` b
 the embedded origin. The bar is emitted unconditionally by the renderer, with no prop to
 suppress it, so a manifest cannot hide that the content is unverified third-party. The
 `<iframe>` sits inside a `jr-iframe__frame` wrapper meant to carry a distinct border in the
-host stylesheet, and the whole thing is a keyed node so re-renders never reload the iframe.
+host stylesheet, keyed by the resolved `src` so a changed URL remounts the frame.
 
 -}
 renderIframe : Context -> Spec.IframeProps -> Html Msg
@@ -694,11 +704,15 @@ renderIframe ctx props =
         Html.text ""
 
     else if isAllowedIframeSrc ctx.allowedOrigins url then
-        -- Keyed so the whole tree re-rendering never remounts (reloads) the live iframe.
+        -- The provenance bar is keyed by a constant so it never remounts. The frame wrapper is
+        -- keyed by the iframe's full src so a changed URL REMOUNTS it: an embed token lives in
+        -- the URL fragment (#token=...), and browsers do not reload an iframe when only the
+        -- fragment changes, so without a keyed remount a fresh token would keep showing the
+        -- stale page.
         Keyed.node "div"
             [ Attr.class "jr-iframe" ]
             [ ( "provenance", provenanceBar url )
-            , ( "frame"
+            , ( url
               , Html.div [ Attr.class "jr-iframe__frame" ]
                     [ iframeElement ctx props url ]
               )

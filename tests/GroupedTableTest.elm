@@ -106,4 +106,27 @@ suite =
                         [ Selector.class "jr-grouped-table--empty"
                         , Selector.text "No rows yet"
                         ]
+        , test "the deprecated `FindingsTable` wire name renders the same summary" <|
+            \_ ->
+                (Render.view [] (specOf findingsTableManifest) scrambledState Render.init
+                    |> Query.fromHtml
+                )
+                    |> Query.findAll [ Selector.class "jr-grouped-table__group" ]
+                    |> Query.count (Expect.equal 4)
         ]
+
+
+{-| The pre-2.0.0 wire name for the same element, kept as a decoder alias.
+-}
+findingsTableManifest : String
+findingsTableManifest =
+    """
+    { "root": "t"
+    , "elements":
+        { "t":
+            { "type": "FindingsTable"
+            , "props": { "bind": { "$state": "/results" }, "groupBy": "severity" }
+            }
+        }
+    }
+    """
