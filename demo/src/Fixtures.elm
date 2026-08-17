@@ -1,9 +1,10 @@
-module Fixtures exposing (cardJson, instancesJson, pressableJson)
+module Fixtures exposing (cardJson, iconButtonJson, instancesJson, pressableJson)
 
 {-| GENERATED — do not edit by hand. Run `node scripts/gen-fixtures.mjs`.
 
 Embeds the authoritative contract fixtures (`contract/card.json`,
-`contract/fixtures/instances.json`, `contract/fixtures/pressable.json`) as string constants so tests and the demo decode
+`contract/fixtures/instances.json`, `contract/fixtures/pressable.json`,
+`contract/fixtures/icon-button.json`) as string constants so tests and the demo decode
 the exact same bytes as the contract.
 
 -}
@@ -194,6 +195,93 @@ pressableJson =
           "confirm": {
             "title": "Show the failure detail?",
             "message": { "$template": "Open the error reported for ${name}." }
+          }
+        }
+      },
+      "children": []
+    }
+  },
+  "state": {
+    "rows": []
+  }
+}"""
+
+
+{-| The icon-button manifest (`contract/fixtures/icon-button.json`): buttons with an icon and a
+label, icon-only buttons (a static empty label and one resolved empty per row), and a plain
+label-only button that must render exactly as it always did.
+-}
+iconButtonJson : String
+iconButtonJson =
+    """{
+  "root": "card",
+  "elements": {
+    "card": {
+      "type": "Card",
+      "props": { "title": "Scan history" },
+      "children": ["legend", "list"]
+    },
+    "legend": {
+      "type": "Stack",
+      "props": { "direction": "row", "gap": 2 },
+      "children": ["legend-plain", "legend-refresh", "legend-close"]
+    },
+    "legend-plain": {
+      "type": "Button",
+      "props": { "label": "Scan selected" },
+      "on": { "press": { "action": "scan.start", "params": {} } },
+      "children": []
+    },
+    "legend-refresh": {
+      "type": "Button",
+      "props": { "label": "Refresh", "icon": "refresh" },
+      "on": { "press": { "action": "history.refresh", "params": {} } },
+      "children": []
+    },
+    "legend-close": {
+      "type": "Button",
+      "props": { "label": "", "icon": "close" },
+      "on": { "press": { "action": "history.close", "params": {} } },
+      "children": []
+    },
+    "list": {
+      "type": "Stack",
+      "props": { "direction": "col", "gap": 1 },
+      "repeat": { "statePath": "/rows", "key": "id" },
+      "children": ["row"]
+    },
+    "row": {
+      "type": "Stack",
+      "props": { "direction": "row", "gap": 2 },
+      "children": ["row-name", "row-open", "row-remove"]
+    },
+    "row-name": {
+      "type": "Text",
+      "props": { "value": { "$item": "name" } },
+      "children": []
+    },
+    "row-open": {
+      "type": "Button",
+      "props": { "label": { "$item": "openLabel" }, "icon": "external" },
+      "on": {
+        "press": {
+          "action": "row.open",
+          "params": { "resultId": { "$item": "id" } }
+        }
+      },
+      "children": []
+    },
+    "row-remove": {
+      "type": "Button",
+      "props": { "label": "", "icon": "trash" },
+      "on": {
+        "press": {
+          "action": "row.remove",
+          "params": { "resultId": { "$item": "id" } },
+          "confirm": {
+            "title": "Remove this scan?",
+            "message": { "$template": "Remove the scan of ${name}?" },
+            "variant": "danger"
           }
         }
       },

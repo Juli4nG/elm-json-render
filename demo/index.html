@@ -98,6 +98,26 @@
       .jr-button:hover {
         background: #f0f2f5;
       }
+      .jr-button--icon {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .jr-button--icon-only {
+        padding: 0.3rem;
+        line-height: 0;
+        color: #6b7280;
+      }
+      .jr-button--icon-only:hover {
+        color: #3b6cd4;
+        border-color: #3b6cd4;
+        background: #eef2fb;
+      }
+      .jr-button--icon-only:has(.jr-icon--trash):hover {
+        color: #d23a3a;
+        border-color: #d23a3a;
+        background: #fdecec;
+      }
       .jr-grouped-table--empty {
         margin-top: 1rem;
         color: #8a93a6;

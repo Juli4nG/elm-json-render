@@ -192,10 +192,20 @@ type alias BadgeProps =
     }
 
 
-{-| `Button` props: the `label` expression.
+{-| `Button` props: the `label` expression and an optional `icon` name.
+
+`icon` is a **name from a closed set** (`"trash"`, `"close"`, `"external"`, `"refresh"`), never
+markup and never an expression: the renderer draws the glyph itself, so a manifest can ask for one
+of a handful of shapes and cannot inject an image. Any other name is refused at decode time, like
+every other off-catalog value. When the resolved `label` is non-empty it stays visible next to the
+glyph; an empty label with an `icon` renders the button icon-only, with the renderer supplying the
+accessible name.
+
 -}
 type alias ButtonProps =
-    { label : Expr }
+    { label : Expr
+    , icon : Maybe String
+    }
 
 
 {-| `Checkbox` props: an optional `label` and an optional `checked` binding (typically a
@@ -550,7 +560,7 @@ allowedPropKeys ct =
             [ "value", "variant" ]
 
         Button ->
-            [ "label" ]
+            [ "label", "icon" ]
 
         Checkbox ->
             [ "label", "checked" ]
@@ -603,8 +613,9 @@ propsBodyDecoder ct =
                 (optionalField "variant" (Decode.map Just Expr.decoder) Nothing)
 
         Button ->
-            Decode.map (ButtonP << ButtonProps)
+            Decode.map2 (\l i -> ButtonP (ButtonProps l i))
                 (Decode.field "label" Expr.decoder)
+                (optionalField "icon" (Decode.map Just iconDecoder) Nothing)
 
         Checkbox ->
             Decode.map2 (\l c -> CheckboxP (CheckboxProps l c))
@@ -662,6 +673,23 @@ directionDecoder =
 
                     other ->
                         Decode.fail ("Unknown Stack direction: `" ++ other ++ "`")
+            )
+
+
+{-| A `Button`'s `icon` name, closed over the four shapes the renderer knows how to draw. A
+manifest naming anything else is refused rather than rendered without a glyph, so a typo surfaces
+as a decode error instead of as a control that silently lost its meaning.
+-}
+iconDecoder : Decoder String
+iconDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\s ->
+                if List.member s [ "trash", "close", "external", "refresh" ] then
+                    Decode.succeed s
+
+                else
+                    Decode.fail ("Unknown Button icon: `" ++ s ++ "`")
             )
 
 

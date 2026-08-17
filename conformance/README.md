@@ -20,6 +20,11 @@ divergence from stock json-render, which wires `on.press` on `Button` only; putt
 the shared fixture would make the golden undiffable against other renderers. They are covered
 by `tests/PressableTest.elm` instead, and the golden is byte-identical across that change.
 
+`contract/fixtures/icon-button.json` is out of the capture for the same reason: stock json-render's
+`Button` has no `icon` prop, so the glyph markup (`jr-button--icon`, the inline `<svg>`) would make
+the golden undiffable. `tests/IconButtonTest.elm` covers it, and the golden is again byte-identical
+— a button with no `icon` renders exactly what it always did.
+
 The `final` scenario is the deterministic terminal state of the fixture state machine
 (`../contract/fixtures/state-machine.md`): all four instances scanned, `batch-worker-07`
 in the error branch, every row selected.

@@ -13,7 +13,7 @@ escape hatch, and no "unknown component, skip it" fallback. If you are rendering
 not write yourself, that strictness is the point.
 
 **Status:** v2. Decoders, expression and binding resolution, renderers, a small TEA host
-interface, 168 passing tests, a runnable demo, and a browser-based conformance snapshot.
+interface, 188 passing tests, a runnable demo, and a browser-based conformance snapshot.
 Pinned to the wire format of `@json-render/core` v0.19.0.
 
 ## Why
@@ -188,6 +188,34 @@ holding a pressable `Text` with its own action) fires exactly one action, the in
 A `Checkbox` inside a pressable `Stack` is the one exception, because its click is not a
 press binding: it toggles *and* presses the stack. Keep checkboxes out of pressable stacks.
 
+## Icon buttons
+
+`Button` takes an optional `icon`. It is a **name from a closed set** — `"trash"`, `"close"`,
+`"external"`, `"refresh"` — never markup and never an expression: the renderer draws the glyph
+itself, so a manifest you did not write cannot hand you an image.
+
+```json
+"row-remove": {
+  "type": "Button",
+  "props": { "label": "", "icon": "trash" },
+  "on": { "press": { "action": "row.remove", "params": { "resultId": { "$item": "id" } } } },
+  "children": []
+}
+```
+
+The glyph is a 16px inline SVG in `currentColor` (classes `jr-icon jr-icon--<name>`,
+`aria-hidden`), placed before the label, and the button gains `jr-button--icon`. The per-glyph
+class is your hook for styling one shape differently — a destructive hover on `jr-icon--trash`,
+say — without the manifest getting a say in it. A non-empty label stays visible beside it.
+
+An **empty** resolved label makes the button icon-only: it gains `jr-button--icon-only`, renders
+no text, and the renderer supplies `aria-label` and `title` per icon (`trash` → "Remove",
+`close` → "Close", `external` → "Open", `refresh` → "Refresh"). The manifest cannot name a shape,
+so the renderer does; the alternative is a control that is invisible to a screen reader.
+
+Sizing and hover tone are yours, as with every `jr-*` class. A button with no `icon` renders
+exactly what it always did.
+
 ## How validation works
 
 Decoding is the security gate. The decoder rejects, rather than silently dropping:
@@ -234,7 +262,7 @@ stock ones.
 ```sh
 elm make                                          # type-check the package
 elm-format --validate src/ tests/
-elm-test-rs                                       # unit + program tests (168 tests)
+elm-test-rs                                       # unit + program tests (188 tests)
 cd conformance && npm install && npm run capture  # demo build + golden snapshot
 ```
 

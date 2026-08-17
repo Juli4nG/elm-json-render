@@ -112,6 +112,27 @@ Stock json-render renderers wire `on.press` on `Button` only, so `jr-pressable` 
 deliberate divergence and is kept out of the shared conformance fixture (`card.json`). It has
 its own contract fixture, `fixtures/pressable.json`.
 
+### 2.3 Icon buttons (Elm renderer)
+
+`Button` takes an optional `icon`, a name from a **closed set** — `"trash"`, `"close"`,
+`"external"`, `"refresh"`. It is a name, never markup and never an expression: the renderer owns
+the shapes, so a manifest can ask for one of four glyphs and cannot inject an image. A name
+outside the set is refused at decode time.
+
+- with an `icon` the button carries `jr-button--icon` and renders a 16px inline SVG in
+  `currentColor` (classes `jr-icon jr-icon--<name>`, `aria-hidden`) BEFORE the label;
+- an **empty** resolved label makes it icon-only: `jr-button--icon-only`, no text child, and the
+  renderer supplies `aria-label` / `title` itself (`trash` → "Remove", `close` → "Close",
+  `external` → "Open", `refresh` → "Refresh"), because the manifest has no way to name a shape;
+- with no `icon` the button renders exactly as before: `class="jr-button"`, the label as its only
+  child, no SVG, nothing named. (The conformance golden is byte-identical across this change.)
+
+Sizing, hit area and hover tone belong to the host stylesheet, as with every other `jr-*` class.
+
+Stock json-render's `Button` has no `icon`, so this is a deliberate divergence and is kept out of
+the shared conformance fixture (`card.json`). It has its own contract fixture,
+`fixtures/icon-button.json`.
+
 ## 3. How the host pushes a state update (so a badge re-renders)
 
 The host drives all live updates by **writing host state at a JSON Pointer**; the renderer

@@ -56,6 +56,8 @@ import JsonRender.Spec as Spec
         , Spec
         , UIElement
         )
+import Svg
+import Svg.Attributes as SvgAttr
 import Url
 
 
@@ -375,6 +377,17 @@ badgeToken state =
     state |> String.words |> List.head |> Maybe.withDefault state
 
 
+{-| Render a `Button`. Without an `icon` this is exactly what it always was: a `jr-button`
+carrying the resolved label as its only child.
+
+An `icon` puts a 16px glyph, drawn inline by the renderer, BEFORE the label and adds
+`jr-button--icon`. A non-empty label stays visible beside the glyph. An **empty** label makes the
+button icon-only (`jr-button--icon-only`), and then the renderer supplies `aria-label` and `title`
+itself, because a control whose whole meaning is a shape is unreadable to a screen reader and
+unlabeled on hover unless something names it. The manifest cannot name it: the icon set is closed,
+so the renderer knows the right word for each shape and the host does not have to repeat it.
+
+-}
 renderButton : Context -> UIElement -> Spec.ButtonProps -> Html Msg
 renderButton ctx element props =
     let
@@ -385,10 +398,120 @@ renderButton ctx element props =
 
                 Nothing ->
                     []
+
+        label =
+            Expr.resolveDisplay ctx props.label
+
+        glyph =
+            Maybe.andThen iconGlyph props.icon
+
+        iconOnly =
+            case glyph of
+                Just _ ->
+                    String.isEmpty label
+
+                Nothing ->
+                    False
+
+        classes =
+            case glyph of
+                Nothing ->
+                    "jr-button"
+
+                Just _ ->
+                    if iconOnly then
+                        "jr-button jr-button--icon jr-button--icon-only"
+
+                    else
+                        "jr-button jr-button--icon"
+
+        nameAttrs =
+            case ( glyph, iconOnly ) of
+                ( Just g, True ) ->
+                    [ Attr.attribute "aria-label" g.name, Attr.title g.name ]
+
+                _ ->
+                    []
+
+        children =
+            case glyph of
+                Nothing ->
+                    [ Html.text label ]
+
+                Just g ->
+                    if iconOnly then
+                        [ iconSvg g ]
+
+                    else
+                        [ iconSvg g, Html.text label ]
     in
     Html.button
-        (Attr.class "jr-button" :: Attr.type_ "button" :: handler)
-        [ Html.text (Expr.resolveDisplay ctx props.label) ]
+        (Attr.class classes :: Attr.type_ "button" :: nameAttrs ++ handler)
+        children
+
+
+{-| The closed icon set: the accessible name for each shape, and the path that draws it. The
+names match [`Spec`](JsonRender-Spec)'s decoder, which rejects anything else, so `Nothing` is
+unreachable through a decoded manifest — and if it were ever reached the button falls back to the
+plain label rendering rather than to a nameless empty control.
+
+The paths are Feather's, stroked rather than filled, on Feather's 24×24 grid.
+
+-}
+iconGlyph : String -> Maybe { key : String, name : String, path : String }
+iconGlyph icon =
+    case icon of
+        "trash" ->
+            Just
+                { key = "trash"
+                , name = "Remove"
+                , path = "M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"
+                }
+
+        "close" ->
+            Just
+                { key = "close"
+                , name = "Close"
+                , path = "M18 6 6 18M6 6l12 12"
+                }
+
+        "external" ->
+            Just
+                { key = "external"
+                , name = "Open"
+                , path = "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"
+                }
+
+        "refresh" ->
+            Just
+                { key = "refresh"
+                , name = "Refresh"
+                , path = "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+                }
+
+        _ ->
+            Nothing
+
+
+{-| A glyph as inline SVG: 16px, `currentColor`, stroked, so it takes the button's own color in
+every theme without the host shipping an icon font or a sprite. `aria-hidden` keeps it out of the
+accessibility tree — the BUTTON carries the name, the drawing is decoration.
+-}
+iconSvg : { key : String, name : String, path : String } -> Html Msg
+iconSvg glyph =
+    Svg.svg
+        [ SvgAttr.class ("jr-icon jr-icon--" ++ glyph.key)
+        , SvgAttr.width "16"
+        , SvgAttr.height "16"
+        , SvgAttr.viewBox "0 0 24 24"
+        , SvgAttr.fill "none"
+        , SvgAttr.stroke "currentColor"
+        , SvgAttr.strokeWidth "2"
+        , SvgAttr.strokeLinecap "round"
+        , SvgAttr.strokeLinejoin "round"
+        , Attr.attribute "aria-hidden" "true"
+        ]
+        [ Svg.path [ SvgAttr.d glyph.path ] [] ]
 
 
 {-| Attributes that turn a non-`Button` element carrying an `on.press` binding into a

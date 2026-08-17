@@ -15,7 +15,7 @@ fail-closed stance, "not supported" almost always means **the decoder rejects it
 | `Stack`         | ✅ | `direction` (`row`/`col`), `gap`; carries `repeat`; honors `on.press` (see *Pressable elements*) |
 | `Text`          | ✅ | required `value` expr; honors `on.press` (see *Pressable elements*) |
 | `Badge`         | ✅ | `value` expr; optional `variant` expr drives the `data-state` styling token (the tone class stays keyed on the display text). Tone map idle→neutral, queued/running→info, done→success, error→danger, keyed on the leading whitespace-delimited token. Honors `on.press` (see *Pressable elements*) |
-| `Button`        | ✅ | `label` expr; `on.press` action |
+| `Button`        | ✅ | `label` expr; optional `icon` name; `on.press` action |
 | `Checkbox`      | ✅ | optional `label`, optional two-way `checked` |
 | `GroupedTable`  | ⚠️ | `bind` + `groupBy`; renders empty-state when `null`, else groups by field. The row-payload schema is intentionally loose; the table groups rows by a string field and counts them. |
 | `Table`         | ✅ | required `columns` (each exactly `key` + `label`) + `bind`; renders a plain row table |
@@ -67,6 +67,13 @@ before 2.0.0), so a pre-2.0.0 manifest still decodes rather than being rejected 
   pressable `Stack` is the exception (its click is not a press binding): it toggles *and*
   presses the stack, so do not nest one there. Contract fixture:
   `contract/fixtures/pressable.json`.
+- **Icon buttons.** `Button` takes an optional `icon`, a name from a closed set (`trash`,
+  `close`, `external`, `refresh`); anything else is rejected at decode. The renderer draws a
+  16px inline SVG in `currentColor` (classes `jr-icon jr-icon--<name>`, `aria-hidden`) before the label and adds
+  `jr-button--icon`; an empty resolved label makes it icon-only (`jr-button--icon-only`) with an
+  `aria-label`/`title` the renderer supplies per icon. Stock json-render's `Button` has no
+  `icon`, so this is a deliberate divergence. Without `icon` the button is byte-for-byte
+  unchanged. Contract fixture: `contract/fixtures/icon-button.json`.
 - An `ActionBinding` accepts **only** `action`, `params`, `confirm`. Unsupported fields
   (`onSuccess`, `onError`, `preventDefault`) are **rejected at decode**, not silently
   dropped; declared follow-up/error behavior must fail closed, not vanish.
