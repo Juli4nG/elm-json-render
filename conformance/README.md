@@ -14,6 +14,12 @@ can be diffed byte-for-byte from the **same fixtures**.
 3. The normalized HTML is written to [`golden.elm.normalized.html`](golden.elm.normalized.html)
    (committed; it's the artifact other renderers of the same format diff against).
 
+`contract/fixtures/pressable.json` is deliberately **not** part of this capture. Press
+bindings on `Text` / `Badge` / `Stack` (and the `jr-pressable` markup they emit) are an Elm
+divergence from stock json-render, which wires `on.press` on `Button` only; putting them in
+the shared fixture would make the golden undiffable against other renderers. They are covered
+by `tests/PressableTest.elm` instead, and the golden is byte-identical across that change.
+
 The `final` scenario is the deterministic terminal state of the fixture state machine
 (`../contract/fixtures/state-machine.md`): all four instances scanned, `batch-worker-07`
 in the error branch, every row selected.

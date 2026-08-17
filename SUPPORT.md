@@ -12,9 +12,9 @@ fail-closed stance, "not supported" almost always means **the decoder rejects it
 | Component       | Supported | Notes |
 |-----------------|-----------|-------|
 | `Card`          | ✅ | optional `title` expr |
-| `Stack`         | ✅ | `direction` (`row`/`col`), `gap`; carries `repeat` |
-| `Text`          | ✅ | required `value` expr |
-| `Badge`         | ✅ | `value` expr; optional `variant` expr drives the `data-state` styling token (the tone class stays keyed on the display text). Tone map idle→neutral, queued/running→info, done→success, error→danger, keyed on the leading whitespace-delimited token |
+| `Stack`         | ✅ | `direction` (`row`/`col`), `gap`; carries `repeat`; honors `on.press` (see *Pressable elements*) |
+| `Text`          | ✅ | required `value` expr; honors `on.press` (see *Pressable elements*) |
+| `Badge`         | ✅ | `value` expr; optional `variant` expr drives the `data-state` styling token (the tone class stays keyed on the display text). Tone map idle→neutral, queued/running→info, done→success, error→danger, keyed on the leading whitespace-delimited token. Honors `on.press` (see *Pressable elements*) |
 | `Button`        | ✅ | `label` expr; `on.press` action |
 | `Checkbox`      | ✅ | optional `label`, optional two-way `checked` |
 | `GroupedTable`  | ⚠️ | `bind` + `groupBy`; renders empty-state when `null`, else groups by field. The row-payload schema is intentionally loose; the table groups rows by a string field and counts them. |
@@ -56,6 +56,17 @@ before 2.0.0), so a pre-2.0.0 manifest still decodes rather than being rejected 
 
 - `on.press` → an `Effect` (`EmitAction { verb, params }`) the host applies. The renderer
   never executes the verb (no URL/`navigate`/`fetch` is ever wired, per the trust model).
+- **Pressable elements.** `on.press` is honored on `Button`, `Text`, `Badge` and `Stack`.
+  Stock json-render wires it on `Button` only, so this is a deliberate divergence (a manifest
+  can make a whole row activate). A non-`Button` element carrying a press binding renders with
+  `role="button"`, `tabindex="0"` and the class `jr-pressable` (the host's styling hook), and
+  activates on click **and** on Enter / Space; any other key is ignored (the decoder fails, so
+  the event is left untouched). Without a binding the element is byte-for-byte unchanged: no
+  class, no role, no tabindex, no handlers. Click and keydown stop propagation, so a pressable
+  nested inside a pressable emits exactly one action, the innermost. A `Checkbox` inside a
+  pressable `Stack` is the exception (its click is not a press binding): it toggles *and*
+  presses the stack, so do not nest one there. Contract fixture:
+  `contract/fixtures/pressable.json`.
 - An `ActionBinding` accepts **only** `action`, `params`, `confirm`. Unsupported fields
   (`onSuccess`, `onError`, `preventDefault`) are **rejected at decode**, not silently
   dropped; declared follow-up/error behavior must fail closed, not vanish.

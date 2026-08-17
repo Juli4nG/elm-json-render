@@ -1,0 +1,71 @@
+{
+  "root": "card",
+  "elements": {
+    "card": {
+      "type": "Card",
+      "props": { "title": "Scan history" },
+      "children": ["legend", "list"]
+    },
+    "legend": {
+      "type": "Stack",
+      "props": { "direction": "row", "gap": 2 },
+      "children": ["legend-text", "legend-badge"]
+    },
+    "legend-text": {
+      "type": "Text",
+      "props": { "value": "Recent scans" },
+      "children": []
+    },
+    "legend-badge": {
+      "type": "Badge",
+      "props": { "value": "idle" },
+      "children": []
+    },
+    "list": {
+      "type": "Stack",
+      "props": { "direction": "col", "gap": 1 },
+      "repeat": { "statePath": "/rows", "key": "id" },
+      "children": ["row"]
+    },
+    "row": {
+      "type": "Stack",
+      "props": { "direction": "row", "gap": 2 },
+      "on": {
+        "press": {
+          "action": "row.open",
+          "params": { "resultId": { "$item": "id" } }
+        }
+      },
+      "children": ["row-name", "row-status"]
+    },
+    "row-name": {
+      "type": "Text",
+      "props": { "value": { "$item": "name" } },
+      "on": {
+        "press": {
+          "action": "row.navigate",
+          "params": { "instanceId": { "$item": "instanceId" } }
+        }
+      },
+      "children": []
+    },
+    "row-status": {
+      "type": "Badge",
+      "props": { "value": { "$item": "state" } },
+      "on": {
+        "press": {
+          "action": "row.detail",
+          "params": { "text": { "$item": "error" } },
+          "confirm": {
+            "title": "Show the failure detail?",
+            "message": { "$template": "Open the error reported for ${name}." }
+          }
+        }
+      },
+      "children": []
+    }
+  },
+  "state": {
+    "rows": []
+  }
+}

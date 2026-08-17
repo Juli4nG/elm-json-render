@@ -20,6 +20,10 @@ const instancesJson = readFileSync(
   join(root, "contract/fixtures/instances.json"),
   "utf8"
 ).trim();
+const pressableJson = readFileSync(
+  join(root, "contract/fixtures/pressable.json"),
+  "utf8"
+).trim();
 
 function guard(label, text) {
   if (text.includes('"""')) {
@@ -28,13 +32,14 @@ function guard(label, text) {
 }
 guard("card.json", cardJson);
 guard("instances.json", instancesJson);
+guard("pressable.json", pressableJson);
 
-const module = `module Fixtures exposing (cardJson, instancesJson)
+const module = `module Fixtures exposing (cardJson, instancesJson, pressableJson)
 
 {-| GENERATED — do not edit by hand. Run \`node scripts/gen-fixtures.mjs\`.
 
 Embeds the authoritative contract fixtures (\`contract/card.json\`,
-\`contract/fixtures/instances.json\`) as string constants so tests and the demo decode
+\`contract/fixtures/instances.json\`, \`contract/fixtures/pressable.json\`) as string constants so tests and the demo decode
 the exact same bytes as the contract.
 -}
 
@@ -49,6 +54,14 @@ cardJson =
 instancesJson : String
 instancesJson =
     """${instancesJson}"""
+
+
+{-| The pressable-elements manifest (\`contract/fixtures/pressable.json\`): a repeat whose
+row \`Stack\`, name \`Text\` and status \`Badge\` all carry an \`on.press\` binding, plus a
+non-pressable \`Stack\`/\`Text\`/\`Badge\` legend. -}
+pressableJson : String
+pressableJson =
+    """${pressableJson}"""
 `;
 
 const targets = ["tests/Fixtures.elm", "demo/src/Fixtures.elm"];

@@ -13,7 +13,7 @@ escape hatch, and no "unknown component, skip it" fallback. If you are rendering
 not write yourself, that strictness is the point.
 
 **Status:** v2. Decoders, expression and binding resolution, renderers, a small TEA host
-interface, 144 passing tests, a runnable demo, and a browser-based conformance snapshot.
+interface, 168 passing tests, a runnable demo, and a browser-based conformance snapshot.
 Pinned to the wire format of `@json-render/core` v0.19.0.
 
 ## Why
@@ -160,6 +160,34 @@ The renderer emits plain `Html` with `jr-*` classes and no styling of its own; y
 the CSS. See `demo/index.html` for a complete stylesheet covering every component, plus the
 confirm-dialog overlay.
 
+## Pressable elements
+
+`on: { press: … }` is not just for `Button`. `Text`, `Badge` and `Stack` honor the same
+single binding, so a manifest can make a status badge, a label, or a whole row activate an
+action:
+
+```json
+"row": {
+  "type": "Stack",
+  "props": { "direction": "row", "gap": 2 },
+  "on": { "press": { "action": "row.open", "params": { "resultId": { "$item": "id" } } } },
+  "children": ["row-name", "row-status"]
+}
+```
+
+An element carrying a press binding renders with `role="button"`, `tabindex="0"` and the
+class `jr-pressable` (your styling hook for cursor, hover and `:focus-visible`), and
+activates on click as well as on Enter and Space. Any other key is left alone. `confirm`
+works exactly as it does on a button.
+
+An element with no press binding renders exactly as it always did: no class, no role, no
+tabindex, no handlers.
+
+Click and keydown stop propagation, so a pressable nested inside a pressable (a row `Stack`
+holding a pressable `Text` with its own action) fires exactly one action, the innermost one.
+A `Checkbox` inside a pressable `Stack` is the one exception, because its click is not a
+press binding: it toggles *and* presses the stack. Keep checkboxes out of pressable stacks.
+
 ## How validation works
 
 Decoding is the security gate. The decoder rejects, rather than silently dropping:
@@ -206,7 +234,7 @@ stock ones.
 ```sh
 elm make                                          # type-check the package
 elm-format --validate src/ tests/
-elm-test-rs                                       # unit + program tests (144 tests)
+elm-test-rs                                       # unit + program tests (168 tests)
 cd conformance && npm install && npm run capture  # demo build + golden snapshot
 ```
 

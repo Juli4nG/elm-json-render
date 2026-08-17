@@ -1,9 +1,9 @@
-module Fixtures exposing (cardJson, instancesJson)
+module Fixtures exposing (cardJson, instancesJson, pressableJson)
 
 {-| GENERATED — do not edit by hand. Run `node scripts/gen-fixtures.mjs`.
 
 Embeds the authoritative contract fixtures (`contract/card.json`,
-`contract/fixtures/instances.json`) as string constants so tests and the demo decode
+`contract/fixtures/instances.json`, `contract/fixtures/pressable.json`) as string constants so tests and the demo decode
 the exact same bytes as the contract.
 
 -}
@@ -125,3 +125,82 @@ instancesJson =
   { "id": "i-2c3d4e5f", "name": "postgres-primary", "status": "ACTIVE" },
   { "id": "i-3d4e5f6a", "name": "batch-worker-07", "status": "ACTIVE" }
 ]"""
+
+
+{-| The pressable-elements manifest (`contract/fixtures/pressable.json`): a repeat whose
+row `Stack`, name `Text` and status `Badge` all carry an `on.press` binding, plus a
+non-pressable `Stack`/`Text`/`Badge` legend.
+-}
+pressableJson : String
+pressableJson =
+    """{
+  "root": "card",
+  "elements": {
+    "card": {
+      "type": "Card",
+      "props": { "title": "Scan history" },
+      "children": ["legend", "list"]
+    },
+    "legend": {
+      "type": "Stack",
+      "props": { "direction": "row", "gap": 2 },
+      "children": ["legend-text", "legend-badge"]
+    },
+    "legend-text": {
+      "type": "Text",
+      "props": { "value": "Recent scans" },
+      "children": []
+    },
+    "legend-badge": {
+      "type": "Badge",
+      "props": { "value": "idle" },
+      "children": []
+    },
+    "list": {
+      "type": "Stack",
+      "props": { "direction": "col", "gap": 1 },
+      "repeat": { "statePath": "/rows", "key": "id" },
+      "children": ["row"]
+    },
+    "row": {
+      "type": "Stack",
+      "props": { "direction": "row", "gap": 2 },
+      "on": {
+        "press": {
+          "action": "row.open",
+          "params": { "resultId": { "$item": "id" } }
+        }
+      },
+      "children": ["row-name", "row-status"]
+    },
+    "row-name": {
+      "type": "Text",
+      "props": { "value": { "$item": "name" } },
+      "on": {
+        "press": {
+          "action": "row.navigate",
+          "params": { "instanceId": { "$item": "instanceId" } }
+        }
+      },
+      "children": []
+    },
+    "row-status": {
+      "type": "Badge",
+      "props": { "value": { "$item": "state" } },
+      "on": {
+        "press": {
+          "action": "row.detail",
+          "params": { "text": { "$item": "error" } },
+          "confirm": {
+            "title": "Show the failure detail?",
+            "message": { "$template": "Open the error reported for ${name}." }
+          }
+        }
+      },
+      "children": []
+    }
+  },
+  "state": {
+    "rows": []
+  }
+}"""

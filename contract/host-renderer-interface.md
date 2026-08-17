@@ -91,6 +91,27 @@ fires. Shape (framework-neutral):
 Both renderers MUST emit the per-row event carrying enough scope (the resolved id or the row
 index/basePath) for the host to identify the row unambiguously.
 
+### 2.2 Pressable non-`Button` elements (Elm renderer)
+
+`on: { press: … }` is honored on `Text`, `Badge` and `Stack` as well as `Button`, so a
+manifest can make a whole row, a status badge or a label activate an action. The binding is
+the same `ActionBinding` (same `params` resolution, same `confirm` dialog); only the
+host-visible markup differs:
+
+- with a press binding the element carries `role="button"`, `tabindex="0"` and the class
+  `jr-pressable` (the host's styling hook: cursor, hover, `:focus-visible`), and activates on
+  click **and** on Enter / Space;
+- with no press binding it renders exactly as before: no class, no role, no tabindex, no
+  handlers. (The conformance golden is byte-identical across this change.)
+- click and keydown **stop propagation**, so a pressable nested inside a pressable (a row
+  `Stack` holding a pressable `Text`) emits exactly one action: the innermost one. A
+  `Checkbox` inside a pressable `Stack` is the exception, since its click is not a press
+  binding: it toggles *and* presses the enclosing stack. Do not nest one there.
+
+Stock json-render renderers wire `on.press` on `Button` only, so `jr-pressable` markup is a
+deliberate divergence and is kept out of the shared conformance fixture (`card.json`). It has
+its own contract fixture, `fixtures/pressable.json`.
+
 ## 3. How the host pushes a state update (so a badge re-renders)
 
 The host drives all live updates by **writing host state at a JSON Pointer**; the renderer
