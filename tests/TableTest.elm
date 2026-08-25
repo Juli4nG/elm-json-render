@@ -81,7 +81,7 @@ state =
 
 render : Query.Single Render.Msg
 render =
-    Render.view [] (specOf manifest) state Render.init
+    Render.view Render.defaultOptions (specOf manifest) state Render.init
         |> Query.fromHtml
 
 

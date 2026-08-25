@@ -53,9 +53,21 @@ stateWith embedUrl =
     Encode.object [ ( "embedUrl", Encode.string embedUrl ) ]
 
 
+{-| The renderer defaults, with only the origin allowlist filled in: everything about the iframe
+boundary is carried by `allowedIframeOrigins` alone.
+-}
+options : Render.Options
+options =
+    let
+        base =
+            Render.defaultOptions
+    in
+    { base | allowedIframeOrigins = allowedOrigins }
+
+
 render : String -> Query.Single Render.Msg
 render embedUrl =
-    Render.view allowedOrigins (specOf iframeManifest) (stateWith embedUrl) Render.init
+    Render.view options (specOf iframeManifest) (stateWith embedUrl) Render.init
         |> Query.fromHtml
 
 

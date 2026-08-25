@@ -109,7 +109,7 @@ update (RendererMsg rmsg) model =
 
 view : Model -> Html Msg
 view model =
-    Html.map RendererMsg (Render.view [] (specOf manifest) state model.renderer)
+    Html.map RendererMsg (Render.view Render.defaultOptions (specOf manifest) state model.renderer)
 
 
 start : ProgramTest Model Msg (Cmd Msg)

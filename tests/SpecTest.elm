@@ -229,14 +229,28 @@ suite =
                         |> isErr
                         |> Expect.equal True
             ]
-        , describe "the FindingsTable wire-name alias (pre-2.0.0 compatibility)"
-            [ test "a `FindingsTable` element decodes as a GroupedTable" <|
+        , describe "the CountPills wire-name aliases (pre-3.0.0 compatibility)"
+            [ test "a `GroupedTable` element (the 2.x name) decodes as CountPills" <|
                 \_ ->
-                    JsonRender.decodeString findingsTableAlias
+                    JsonRender.decodeString (countPillsAlias "GroupedTable")
                         |> Result.toMaybe
                         |> Maybe.andThen (\spec -> Dict.get "t" spec.elements)
                         |> Maybe.map .componentType
-                        |> Expect.equal (Just GroupedTable)
+                        |> Expect.equal (Just CountPills)
+            , test "a `FindingsTable` element (the pre-2.0.0 name) decodes as CountPills" <|
+                \_ ->
+                    JsonRender.decodeString (countPillsAlias "FindingsTable")
+                        |> Result.toMaybe
+                        |> Maybe.andThen (\spec -> Dict.get "t" spec.elements)
+                        |> Maybe.map .componentType
+                        |> Expect.equal (Just CountPills)
+            , test "an alias still reports the canonical name, so diagnostics never say the old one" <|
+                \_ ->
+                    JsonRender.decodeString (countPillsAlias "FindingsTable")
+                        |> Result.toMaybe
+                        |> Maybe.andThen (\spec -> Dict.get "t" spec.elements)
+                        |> Maybe.map (.componentType >> Spec.componentName)
+                        |> Expect.equal (Just "CountPills")
             ]
         ]
 
@@ -413,14 +427,15 @@ cardMalformedTitle =
     """
 
 
-findingsTableAlias : String
-findingsTableAlias =
+countPillsAlias : String -> String
+countPillsAlias wireName =
     """
     { "root": "t"
     , "elements":
-        { "t": { "type": "FindingsTable", "props": { "bind": { "$state": "/results" } }, "children": [] } }
+        { "t": { "type": "@@", "props": { "bind": { "$state": "/results" } }, "children": [] } }
     }
     """
+        |> String.replace "@@" wireName
 
 
 badgeWithVariant : String
@@ -486,7 +501,7 @@ buttonWithUnknownProp =
     """
     { "root": "r"
     , "elements":
-        { "r": { "type": "Button", "props": { "label": "x", "disabled": true }, "children": [] } }
+        { "r": { "type": "Button", "props": { "label": "x", "tooltip": "x" }, "children": [] } }
     }
     """
 

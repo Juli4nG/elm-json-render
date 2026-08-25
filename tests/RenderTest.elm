@@ -85,7 +85,7 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    Html.map RendererMsg (Render.view [] model.spec model.state model.renderer)
+    Html.map RendererMsg (Render.view Render.defaultOptions model.spec model.state model.renderer)
 
 
 start : Value -> ProgramTest Model Msg (Cmd Msg)
@@ -261,7 +261,7 @@ renderBadgeSpec : String -> Value -> Query.Single Msg
 renderBadgeSpec specJson state =
     (case JsonRender.decodeString specJson of
         Ok spec ->
-            Html.map RendererMsg (Render.view [] spec state Render.init)
+            Html.map RendererMsg (Render.view Render.defaultOptions spec state Render.init)
 
         Err message ->
             Html.text ("decode failed: " ++ message)
