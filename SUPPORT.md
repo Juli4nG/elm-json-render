@@ -17,11 +17,11 @@ fail-closed stance, "not supported" almost always means **the decoder rejects it
 | `Badge`         | ✅ | `value` expr; optional `variant` expr drives the `data-state` styling token (the tone class stays keyed on the display text). Tone map idle→neutral, queued/running/stopping→info, done→success, error→danger, keyed on the leading whitespace-delimited token minus a trailing ellipsis. Exposed as `Render.badgeTone`. Honors `on.press` (see *Pressable elements*) |
 | `Button`        | ✅ | `label` expr; optional `icon` name; optional `disabled` expr (truthy ⇒ native `disabled`, `jr-button--disabled`, no press handler); `on.press` action. An empty resolved `label` with no `icon` renders nothing at all |
 | `Checkbox`      | ✅ | optional `label`, optional two-way `checked` |
-| `CountPills`    | ⚠️ | required `bind`; optional `groupBy`, `groupOrder`, `itemNoun`, `itemNounPlural`, `emptyLabel`, each falling back to the host's `Render.Options.countPills`. Renders a total plus one pill per group, zero counts dropped; unranked groups sort by descending count then name. `emptyLabel` resolving to `""` renders no empty-state node. The row-payload schema is intentionally loose; rows are grouped by a string field and counted. |
+| `CountPills`    | ⚠️ | required `bind`; optional `groupBy`, `groupOrder`, `itemNoun`, `itemNounPlural` all falling back to the host's `Render.Options.countPills`, plus `emptyLabel`, which has **no host default** (absent ⇒ the renderer synthesizes `"No <plural> yet"`; resolving to `""` ⇒ no empty-state node). Renders a total plus one pill per group, zero counts dropped; unranked groups sort by descending count then name; `groupOrder` matching is case-insensitive and first-wins on duplicates. Every optional key **fails closed when present but malformed**. The row-payload schema is intentionally loose; rows are grouped by a string field and counted. |
 | `Table`         | ✅ | required `columns` (each exactly `key` + `label`) + `bind`; renders a plain row table |
 | `Alert`         | ✅ | required `tone` (`info`/`warning`/`danger`) + `message` expr; optional `title` expr |
 | `Disclosure`    | ✅ | required `label` expr; optional `open` bool (default `false`) |
-| `Iframe`        | ⚠️ | required `src` + `title` exprs. **Origin-pinned**: an `<iframe>` is emitted only for an https `src` whose origin is an exact member of `Render.Options.allowedIframeOrigins`; anything else self-hides or renders a placeholder. An always-on provenance bar is not suppressible from a manifest |
+| `Iframe`        | ⚠️ | required `src` + `title` exprs. **Origin-pinned**: an `<iframe>` is emitted only for an https `src` whose origin is an exact member of `Render.Options.allowedIframeOrigins`; anything else self-hides or renders a placeholder. An always-on provenance bar is not suppressible from a manifest; it names the embedded origin and disclaims it on behalf of `Render.Options.hostName`, which no manifest prop can reach |
 
 An **unknown component `type` fails the decode** (fail-closed). json-render's own renderer
 is fail-open here (warns + renders `null`); we are not.
@@ -120,6 +120,34 @@ rather than silently degrading to a button with no dialog or an element rendered
    `repeat` without children) rather than a separate opt-in `validateSpec` pass.
 3. **`CountPills` payload is intentionally loose**: the contract does not pin a row
    schema, so rows are grouped by a string field and counted. The words used to count
-   them come from the manifest or, failing that, from the host's `Render.Options`.
+   them come from the manifest or, failing that, from the host's `Render.Options` —
+   except `emptyLabel`, which the renderer synthesizes when neither names it.
 4. **`SpecStream` / streaming JSON-Patch** (`data-spec` parts) is out of scope; we
    consume a complete flat `Spec`.
+
+## Strictness changes in 3.0.0
+
+Two decode-time behaviors got stricter. Both are hardening in the same direction as everything
+else in this file, both are intentional, and both were audited against the manifests known to
+exist (`contract/card.json`, its fixtures, and Exosphere's deployed `card.json` v5) with no
+regressions found. They are listed here because they can reject a manifest that 2.x, and the
+fork Exosphere vendored, accepted.
+
+1. **A present-but-malformed optional field now rejects the manifest.** Previously eight optional
+   fields decoded through `Decode.maybe (Decode.field …)`, which cannot tell "absent" from
+   "present and unparseable" and reports both as absent: element `repeat`, `Card.title`,
+   `Checkbox.label`, `Checkbox.checked`, `Alert.title`, `repeat.key`, an action binding's
+   `confirm`, and `confirm`'s `confirmLabel` / `cancelLabel`. Silently reading a malformed
+   `confirm` as absent is the failure that matters: it turns a guarded destructive action into an
+   unguarded one, which is exactly the outcome fail-closed exists to prevent. All eight now
+   reject. A manifest that was already well-formed is unaffected.
+
+2. **A comparand object carrying any `$`-prefixed key now rejects.** Inside a `$cond`, only
+   `{ "$state": "<string>" }` is a legal reference operand. Previously just the `$state` key was
+   reserved, so `{ "$computed": … }` or `{ "$item": … }` in operand position degraded to an inert
+   object literal — which by the object-inequality rule makes the branch permanently `False`, a
+   condition that silently never fires rather than an error anyone sees. Any `$`-prefixed key in
+   an operand now fails the decode. A plain object or array literal with no `$`-prefixed key is
+   still a legal literal.
+
+Neither change affects a well-formed manifest, and neither loosens anything.

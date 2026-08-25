@@ -60,6 +60,7 @@ reads but a manifest can never reach. In the Elm renderer this is `Render.Option
 
 ```elm
 { allowedIframeOrigins : List String
+, hostName : String
 , countPills :
     { groupBy : String
     , groupOrder : List String
@@ -72,18 +73,30 @@ reads but a manifest can never reach. In the Elm renderer this is `Render.Option
 - `allowedIframeOrigins` is the security boundary for `Iframe`: an `<iframe>` is emitted only
   for an https `src` whose origin is an exact member. Empty disables all iframes. This must
   never be reachable from a manifest.
+- `hostName` is the trust chrome that goes with it: the always-on provenance bar reads
+  "Third-party content from `<origin>` — not verified by `<hostName>`". Host-owned for the same
+  reason the allowlist is — the embedded party must never get to write the sentence disclaiming
+  itself — and named rather than generic because a disclaimer reads as a promise from whoever is
+  named in it.
 - `countPills` is vocabulary, not security: the words a `CountPills` element counts in when its
   manifest does not name its own. It exists so a manifest published before those prop keys
-  existed keeps reading in the host's words with no wire change.
+  existed keeps reading in the host's words with no wire change. `emptyLabel` is deliberately
+  NOT in here: when neither the manifest nor anything else names it, the renderer synthesizes
+  "No `<plural>` yet" from the plural noun already in play.
 
 ### 1.4 Refusal classification (what the host shows when validation fails)
 
 The decoder's diagnostic is written for whoever is debugging the publisher. A host with a real
 audience classifies it instead of printing it: `Spec.errorKind` returns
-`UnknownCatalogSurface` when the manifest named a component type, prop key or icon this build
-does not have (the honest reading is version skew), and `Malformed` for everything else
-(nothing suggests a newer renderer would help). Both refuse to render; only the sentence
-differs.
+`UnknownCatalogSurface` when the manifest named a component type, an icon, or any other key
+this build does not have — a prop key, but equally an unsupported element, action-binding,
+confirm, `repeat` or `Table`-column key — since the honest reading of all of those is version
+skew. `Malformed` covers everything else, where nothing suggests a newer renderer would help.
+Both refuse to render; only the sentence differs.
+
+Known limit, accepted: the decode error embeds the offending JSON, so a malformed manifest whose
+own DATA quotes one of the classifier's marker strings is read as skew. It picks the wrong
+sentence and nothing else.
 
 ## 2. Outputs (the action event)
 

@@ -232,21 +232,28 @@ type alias CheckboxProps =
 {-| `CountPills` props: the `bind` expression pointing at an array of records, and the vocabulary
 for counting them.
 
-Everything but `bind` is optional, and every absent value falls back to the host's
-[`Render.CountPillDefaults`](JsonRender-Render#CountPillDefaults). That is deliberate: the words a
-publisher counts in — what a row is called, which field groups them, which group leads — are the
+Everything but `bind` is optional. `groupBy`, `groupOrder`, `itemNoun` and `itemNounPlural` fall
+back to the host's [`Render.CountPillDefaults`](JsonRender-Render#CountPillDefaults) when absent;
+`emptyLabel` is the exception and has no host default. That is deliberate: the words a publisher
+counts in — what a row is called, which field groups them, which group leads — are the
 publisher's, not the renderer's, and a manifest written before these keys existed must keep
 rendering in them.
+
+Optional does not mean lenient. A key that is PRESENT but malformed (a null `groupBy`, a
+`groupOrder` carrying a non-string member, a `$computed` in `emptyLabel`) rejects the whole
+manifest rather than decoding as absent.
 
   - `groupBy` — the record field to group on.
   - `groupOrder` — the group values, in the order they should be shown. Groups outside the list
     sort after the listed ones, by descending count and then name, which is also what an empty
-    order does to everything.
+    order does to everything. Matching is case-insensitive, and a value listed more than once
+    takes its FIRST position.
   - `itemNoun` / `itemNounPlural` — what one row and many rows are called, for the total.
-  - `emptyLabel` — what a manifest says definitively about an empty table. The fallback
-    ("No <plural> yet") is right for a table that has nothing bound yet and wrong for a completed,
-    genuinely empty one; only the publisher knows which it is, so it supplies the string. Absent
-    means the fallback; resolving to an empty string means no empty-state node at all.
+  - `emptyLabel` — what a manifest says definitively about an empty table. Alone among these
+    keys it has NO host default: absent, the renderer synthesizes "No <plural> yet" from whichever
+    plural noun is in play. That fallback is right for a table that has nothing bound yet and
+    wrong for a completed, genuinely empty one; only the publisher knows which it is, so it
+    supplies the string. Resolving to an empty string means no empty-state node at all.
 
 -}
 type alias CountPillsProps =
@@ -385,9 +392,12 @@ componentName ct =
 tell. A host shows its audience one sentence, not a decoder dump, and this is what decides which
 sentence:
 
-  - `UnknownCatalogSurface` — the manifest named a component type or a key this catalog does not
-    have. The publisher is describing an interface some newer renderer would understand, so the
-    honest reading is version skew, not a broken manifest.
+  - `UnknownCatalogSurface` — the manifest named a component type, an icon, or any other key this
+    catalog does not have. "Any other key" is the whole `rejectUnknownKeys` surface, not just
+    props: an unsupported element key (`visible`, `watch`), action-binding key (`onSuccess`),
+    confirm key, `repeat` key, or `Table` column key all land here. The publisher is describing an
+    interface some newer renderer would understand, so the honest reading is version skew, not a
+    broken manifest.
   - `Malformed` — everything else: a missing required field, a wrong-shaped prop, a body that is
     not even JSON. Nothing here suggests a newer renderer would fare better.
 

@@ -153,13 +153,18 @@ view model =
 when its resolved `src` is an https URL whose origin is an exact member of this list.
 Keep it `[]` unless you deliberately embed something.
 
+`hostName` is what the iframe provenance bar disclaims on behalf of ("not verified by
+<hostName>"). Name your app: a disclaimer reads as a promise from whoever is named in it,
+and readers skim a generic one.
+
 `countPills` is the vocabulary a `CountPills` element falls back to when the manifest does
-not name its own. `Render.defaultOptions` is exactly this record, so start there and
-override the fields you care about.
+not name its own. `Render.defaultOptions` is exactly this record with `[]`, "the host
+application" and plain "items", so start there and override what you care about.
 -}
 options : Render.Options
 options =
     { allowedIframeOrigins = []
+    , hostName = "Acme Console"
     , countPills =
         { groupBy = "severity"
         , groupOrder = [ "critical", "high", "medium", "low", "info" ]
@@ -270,17 +275,24 @@ counts and orders; the words are yours.
 }
 ```
 
-Every key but `bind` is optional, and each one falls back to the `countPills` field of your
-`Render.Options`. That split is what lets a manifest published before these keys existed keep
-rendering in your vocabulary rather than in the renderer's.
+Every key but `bind` is optional. `groupBy`, `groupOrder`, `itemNoun` and `itemNounPlural`
+fall back to the `countPills` field of your `Render.Options`; that split is what lets a manifest
+published before these keys existed keep rendering in your vocabulary rather than in the
+renderer's. `emptyLabel` is the exception and has no host default — see below.
+
+Optional is not lenient. A key that is present but malformed (a null `groupBy`, a `groupOrder`
+with a non-string member, a `$computed` in `emptyLabel`) rejects the whole manifest rather than
+decoding as absent.
 
 Groups your `groupOrder` does not name sort after the ones it does, by descending count then
-name, which is also what an empty order does to everything. Zero counts are dropped.
+name, which is also what an empty order does to everything. Zero counts are dropped. Matching is
+case-insensitive, and a value listed twice takes its first position.
 
-`emptyLabel` is what an empty table says. Absent, it falls back to "No `<plural>` yet", which is
-right for a table with nothing bound yet and wrong for a completed, genuinely empty one — only
-the publisher knows which, so it supplies the string. Resolving it to the empty string renders no
-empty-state node at all.
+`emptyLabel` is what an empty table says, and it is the one key with no host default. Absent, the
+renderer synthesizes "No `<plural>` yet" from whichever plural is in play, which is right for a
+table with nothing bound yet and wrong for a completed, genuinely empty one — only the publisher
+knows which, so it supplies the string. Resolving it to the empty string renders no empty-state
+node at all.
 
 Markup is `div.jr-counts` with a `span.jr-counts__total` and one
 `span.jr-counts__pill.jr-counts__pill--<group>` per group, each holding a `__dot`, a `__count`
@@ -306,14 +318,18 @@ than json-render's own renderers, which warn and skip on unknown input.
 an end user. If your host has a real audience, pass the message to `Spec.errorKind` and write
 your own copy:
 
-- `UnknownCatalogSurface` — the manifest named a component type, a prop key or an icon this
-  build does not have. The honest reading is that the publisher is describing an interface a
+- `UnknownCatalogSurface` — the manifest named a component type, an icon, or any other key
+  this build does not have: a prop key, but also an unsupported element key (`visible`,
+  `watch`), action-binding key (`onSuccess`), confirm key, `repeat` key or `Table` column key. The honest reading is that the publisher is describing an interface a
   newer renderer would understand, so "this app may need updating" is a real thing to say.
 - `Malformed` — everything else. Nothing suggests a newer renderer would fare better, so the
   message should say the refusal is deliberate and point at the publisher.
 
 The classifier lives next to the `Decode.fail` arms it classifies and reads the same strings
-those arms are built from, so rewording a diagnostic cannot silently break it.
+those arms are built from, so rewording a diagnostic cannot silently break it. One known limit:
+`Decode.errorToString` prints the offending JSON, so a malformed manifest whose own data quotes
+one of those strings is read as skew. That picks the wrong sentence and nothing else — both kinds
+still refuse to render.
 
 Actions are inert by design. The renderer never navigates, fetches, or executes anything.
 Every action surfaces to the host as an `Effect`, and the host decides what runs.
