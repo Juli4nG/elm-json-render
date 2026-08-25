@@ -3,7 +3,7 @@
     "name": "Juli4nG/elm-json-render",
     "summary": "Render json-render UI manifests in pure Elm, strict and fail-closed",
     "license": "MIT",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "exposed-modules": [
         "JsonRender",
         "JsonRender.Spec",
