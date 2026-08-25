@@ -14,6 +14,11 @@ Three shapes of button live side by side in the shared contract fixture
 The decoder half is here too: the icon set is closed, so a name outside it is refused rather than
 rendered without a glyph.
 
+A second, local manifest (`interactionJson`) covers where `icon` meets `disabled` and the
+empty-label rule, which the shared fixture cannot reach: a disabled icon-only button stays on
+screen with its glyph and is inert, while an empty label with NO icon is still suppressed outright.
+It also carries the icon-only press that emits with no `confirm` in the way.
+
 -}
 
 import Dict
@@ -177,6 +182,91 @@ expectAction expected =
 
 
 
+-- INTERACTION FIXTURE
+
+
+{-| A second, local manifest for where `icon` meets `disabled` and the empty-label rule.
+
+Kept out of `contract/fixtures/icon-button.json` for two reasons: that fixture carries no
+`disabled` prop, and adding buttons to it would shift every positional finder above. Both buttons
+here are icon-only, and neither wires a `confirm`, which the shared fixture's icon-only button
+does — so this also covers the press path that emits straight through instead of through a dialog.
+
+-}
+interactionJson : String
+interactionJson =
+    """
+    { "root": "bar"
+    , "elements":
+        { "bar":
+            { "type": "Stack"
+            , "props": { "direction": "row", "gap": 2 }
+            , "children": [ "remove", "refresh" ]
+            }
+        , "remove":
+            { "type": "Button"
+            , "props": { "label": "", "icon": "trash", "disabled": { "$state": "/requestBusy" } }
+            , "on": { "press": { "action": "row.remove", "params": { "resultId": "r-2" } } }
+            }
+        , "refresh":
+            { "type": "Button"
+            , "props": { "label": "", "icon": "refresh" }
+            , "on": { "press": { "action": "row.refresh", "params": {} } }
+            }
+        }
+    }
+    """
+
+
+interactionSpec : Spec
+interactionSpec =
+    case JsonRender.decodeString interactionJson of
+        Ok decoded ->
+            decoded
+
+        Err _ ->
+            { root = "missing", elements = Dict.empty, state = Encode.null }
+
+
+busy : Bool -> Value
+busy value =
+    Encode.object [ ( "requestBusy", Encode.bool value ) ]
+
+
+renderInteraction : Bool -> Query.Single Render.Msg
+renderInteraction requestBusy =
+    Render.view Render.defaultOptions interactionSpec (busy requestBusy) Render.init
+        |> Query.fromHtml
+
+
+startInteraction : Bool -> ProgramTest Model Msg (Cmd Msg)
+startInteraction requestBusy =
+    ProgramTest.createElement
+        { init = init
+        , update = update
+        , view =
+            \model ->
+                Html.map RendererMsg
+                    (Render.view Render.defaultOptions interactionSpec (busy requestBusy) model.renderer)
+        }
+        |> ProgramTest.start ()
+
+
+{-| The trash button; index 0 either way, since `disabled` never removes the element.
+-}
+removeButton : Query.Single msg -> Query.Single msg
+removeButton =
+    buttonAt 0
+
+
+{-| The refresh button: icon-only, enabled, and wired to a press with no `confirm`.
+-}
+refreshNoConfirmButton : Query.Single msg -> Query.Single msg
+refreshNoConfirmButton =
+    buttonAt 1
+
+
+
 -- TESTS
 
 
@@ -302,6 +392,69 @@ suite =
                         |> ProgramTest.simulateDomEvent secondRowRemove Event.click
                         |> ProgramTest.clickButton "Confirm"
                         |> expectAction (Just ( "row.remove", "{\"resultId\":\"/rows/1/id\"}" ))
+            , test "an enabled icon-only button with no confirm emits its press straight through" <|
+                \_ ->
+                    -- The icon-only press above routes through a dialog, so on its own it never
+                    -- exercises the direct path. Here the press IS the emit.
+                    startInteraction False
+                        |> ProgramTest.simulateDomEvent refreshNoConfirmButton Event.click
+                        |> expectAction (Just ( "row.refresh", "{}" ))
+            ]
+        , describe "icon-only and disabled"
+            [ test "a disabled icon-only button emits nothing, as any disabled button" <|
+                \_ ->
+                    renderInteraction True
+                        |> removeButton
+                        |> Event.simulate Event.click
+                        |> Event.toResult
+                        |> Expect.err
+            , test "the same button emits once it is no longer disabled (guards the case above)" <|
+                \_ ->
+                    renderInteraction False
+                        |> removeButton
+                        |> Event.simulate Event.click
+                        |> Event.toResult
+                        |> Expect.ok
+            , test "a disabled icon-only button still RENDERS: the glyph is not the empty label" <|
+                \_ ->
+                    -- The three rules meet here. Empty label plus icon means icon-only, not
+                    -- suppressed; disabled means unavailable, not absent. So the control stays on
+                    -- screen, keeps its glyph and its renderer-supplied name, and is inert.
+                    renderInteraction True
+                        |> removeButton
+                        |> Expect.all
+                            [ Query.has
+                                [ Selector.class "jr-button--icon-only"
+                                , Selector.class "jr-button--disabled"
+                                , Selector.attribute (Html.Attributes.disabled True)
+                                , Selector.attribute (Html.Attributes.title "Remove")
+                                ]
+                            , Query.find [ Selector.tag "svg" ]
+                                >> Query.has [ Selector.class "jr-icon--trash" ]
+                            ]
+            , test "an empty label with no icon is still suppressed, disabled or not" <|
+                \_ ->
+                    -- The exemption is the icon's, not `disabled`'s.
+                    JsonRender.decodeString
+                        """
+                        { "root": "b"
+                        , "elements":
+                            { "b":
+                                { "type": "Button"
+                                , "props": { "label": "", "disabled": true }
+                                , "on": { "press": { "action": "row.remove", "params": {} } }
+                                }
+                            }
+                        }
+                        """
+                        |> Result.map
+                            (\s ->
+                                Render.view Render.defaultOptions s Encode.null Render.init
+                                    |> Query.fromHtml
+                                    |> Query.findAll [ Selector.tag "button" ]
+                                    |> Query.count (Expect.equal 0)
+                            )
+                        |> Result.withDefault (Expect.fail "the manifest should have decoded")
             ]
         , describe "decode"
             [ test "the contract fixture decodes" <|
