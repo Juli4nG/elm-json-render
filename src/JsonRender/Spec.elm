@@ -1,6 +1,8 @@
 module JsonRender.Spec exposing
     ( Spec
     , decoder
+    , ErrorKind(..)
+    , errorKind
     , UIElement
     , ComponentType(..)
     , componentName
@@ -12,7 +14,7 @@ module JsonRender.Spec exposing
     , BadgeProps
     , ButtonProps
     , CheckboxProps
-    , GroupedTableProps
+    , CountPillsProps
     , IframeProps
     , TableProps
     , Column
@@ -47,6 +49,12 @@ A rejected manifest never produces a partial tree: the host shows an error stub.
 @docs decoder
 
 
+# Why a decode failed
+
+@docs ErrorKind
+@docs errorKind
+
+
 # Elements
 
 @docs UIElement
@@ -64,7 +72,7 @@ A rejected manifest never produces a partial tree: the host shows an error stub.
 @docs BadgeProps
 @docs ButtonProps
 @docs CheckboxProps
-@docs GroupedTableProps
+@docs CountPillsProps
 @docs IframeProps
 @docs TableProps
 @docs Column
@@ -120,7 +128,7 @@ type ComponentType
     | Badge
     | Button
     | Checkbox
-    | GroupedTable
+    | CountPills
     | Iframe
     | Table
     | Alert
@@ -138,7 +146,7 @@ type Props
     | BadgeP BadgeProps
     | ButtonP ButtonProps
     | CheckboxP CheckboxProps
-    | GroupedTableP GroupedTableProps
+    | CountPillsP CountPillsProps
     | IframeP IframeProps
     | TableP TableProps
     | AlertP AlertProps
@@ -192,7 +200,10 @@ type alias BadgeProps =
     }
 
 
-{-| `Button` props: the `label` expression and an optional `icon` name.
+{-| `Button` props: the `label` expression, an optional `icon` name, and an optional `disabled`
+expression. When `disabled` resolves truthy the button renders inert (the native `disabled`
+attribute, a `jr-button--disabled` class, and no press handler at all); absent means enabled, the
+historical behavior.
 
 `icon` is a **name from a closed set** (`"trash"`, `"close"`, `"external"`, `"refresh"`), never
 markup and never an expression: the renderer draws the glyph itself, so a manifest can ask for one
@@ -205,6 +216,7 @@ accessible name.
 type alias ButtonProps =
     { label : Expr
     , icon : Maybe String
+    , disabled : Maybe Expr
     }
 
 
@@ -217,13 +229,33 @@ type alias CheckboxProps =
     }
 
 
-{-| `GroupedTable` props: the `bind` expression pointing at the array of rows to group
-and a `groupBy` field name. The table groups the array of records by that field and shows
-counts.
+{-| `CountPills` props: the `bind` expression pointing at an array of records, and the vocabulary
+for counting them.
+
+Everything but `bind` is optional, and every absent value falls back to the host's
+[`Render.CountPillDefaults`](JsonRender-Render#CountPillDefaults). That is deliberate: the words a
+publisher counts in — what a row is called, which field groups them, which group leads — are the
+publisher's, not the renderer's, and a manifest written before these keys existed must keep
+rendering in them.
+
+  - `groupBy` — the record field to group on.
+  - `groupOrder` — the group values, in the order they should be shown. Groups outside the list
+    sort after the listed ones, by descending count and then name, which is also what an empty
+    order does to everything.
+  - `itemNoun` / `itemNounPlural` — what one row and many rows are called, for the total.
+  - `emptyLabel` — what a manifest says definitively about an empty table. The fallback
+    ("No <plural> yet") is right for a table that has nothing bound yet and wrong for a completed,
+    genuinely empty one; only the publisher knows which it is, so it supplies the string. Absent
+    means the fallback; resolving to an empty string means no empty-state node at all.
+
 -}
-type alias GroupedTableProps =
+type alias CountPillsProps =
     { bind : Expr
-    , groupBy : String
+    , groupBy : Maybe String
+    , groupOrder : Maybe (List String)
+    , itemNoun : Maybe String
+    , itemNounPlural : Maybe String
+    , emptyLabel : Maybe Expr
     }
 
 
@@ -329,8 +361,8 @@ componentName ct =
         Checkbox ->
             "Checkbox"
 
-        GroupedTable ->
-            "GroupedTable"
+        CountPills ->
+            "CountPills"
 
         Iframe ->
             "Iframe"
@@ -343,6 +375,75 @@ componentName ct =
 
         Disclosure ->
             "Disclosure"
+
+
+
+-- WHY A DECODE FAILED
+
+
+{-| Why a manifest failed the fail-closed decode, as far as the decoder's own diagnostics can
+tell. A host shows its audience one sentence, not a decoder dump, and this is what decides which
+sentence:
+
+  - `UnknownCatalogSurface` — the manifest named a component type or a key this catalog does not
+    have. The publisher is describing an interface some newer renderer would understand, so the
+    honest reading is version skew, not a broken manifest.
+  - `Malformed` — everything else: a missing required field, a wrong-shaped prop, a body that is
+    not even JSON. Nothing here suggests a newer renderer would fare better.
+
+This lives beside the `Decode.fail` arms it classifies, and reads the very strings those arms are
+built from, so the two cannot drift apart: rewording a diagnostic moves the marker with it.
+
+-}
+type ErrorKind
+    = UnknownCatalogSurface
+    | Malformed
+
+
+{-| Classify a decode failure message (the `Err` from [`JsonRender.decodeString`](JsonRender#decodeString),
+which is `Decode.errorToString` output and so embeds the failing arm's own text).
+
+Substring matching is the only tool available — Elm decode errors are strings by the time they
+reach a host. `Decode.errorToString` also prints offending JSON, so a manifest containing one of
+these markers verbatim as data would be read as skew. That mis-picks which reassuring sentence the
+reader sees and nothing else: both kinds refuse to render, which is the part that matters.
+
+-}
+errorKind : String -> ErrorKind
+errorKind message =
+    if List.any (\marker -> String.contains marker message) unknownCatalogSurfaceMarkers then
+        UnknownCatalogSurface
+
+    else
+        Malformed
+
+
+{-| The fragments the off-catalog arms put in their messages. Every such arm builds its text from
+these constants, so this list is the definition of "the decoder said: newer catalog", not a guess
+about it.
+-}
+unknownCatalogSurfaceMarkers : List String
+unknownCatalogSurfaceMarkers =
+    [ unknownComponentTypeMarker, unsupportedKeyMarker, unknownIconMarker ]
+
+
+unknownComponentTypeMarker : String
+unknownComponentTypeMarker =
+    "Unknown / off-catalog component type"
+
+
+unsupportedKeyMarker : String
+unsupportedKeyMarker =
+    "key(s) (fail-closed; not implemented)"
+
+
+{-| An `icon` name the catalog does not draw is skew, not corruption: the icon set is closed and
+grows, so a manifest naming a shape this build has not learned yet is the same situation as a
+component type it has not learned yet.
+-}
+unknownIconMarker : String
+unknownIconMarker =
+    "Unknown Button icon"
 
 
 
@@ -431,7 +532,7 @@ elementDecoder =
 otherwise fail-closed. The strictness floor reused for elements, props, action bindings,
 confirm, and repeat. Elm decoders ignore unknown keys (and silently default on
 non-objects) by default, which would drop unsupported contract surface (`visible`,
-`onSuccess`, a future `disabled` prop) or accept a malformed `"props": []`.
+`onSuccess`, a future prop this build has not learned yet) or accept a malformed `"props": []`.
 -}
 rejectUnknownKeys : String -> List String -> Decoder a -> Decoder a
 rejectUnknownKeys label allowed inner =
@@ -448,7 +549,9 @@ rejectUnknownKeys label allowed inner =
                                 Decode.fail
                                     ("Unsupported "
                                         ++ label
-                                        ++ " key(s) (fail-closed; not implemented): "
+                                        ++ " "
+                                        ++ unsupportedKeyMarker
+                                        ++ ": "
                                         ++ String.join ", " (List.map Tuple.first extra)
                                     )
 
@@ -471,7 +574,7 @@ elementBodyDecoder =
                             (optionalField "repeat" (Decode.map Just repeatDecoder) Nothing)
 
                     Nothing ->
-                        Decode.fail ("Unknown / off-catalog component type: `" ++ name ++ "`")
+                        Decode.fail (unknownComponentTypeMarker ++ ": `" ++ name ++ "`")
             )
 
 
@@ -496,14 +599,18 @@ parseComponentType name =
         "Checkbox" ->
             Just Checkbox
 
-        "GroupedTable" ->
-            Just GroupedTable
+        "CountPills" ->
+            Just CountPills
 
-        -- Deprecated wire-name alias: `GroupedTable` was called `FindingsTable` before
-        -- 2.0.0. Kept so a pre-2.0.0 manifest still decodes (fail-closed means the rename
-        -- would otherwise reject the whole manifest, not just the one element).
+        -- Deprecated wire-name aliases. This element was `FindingsTable` before 2.0.0 and
+        -- `GroupedTable` in 2.x; both keep decoding to the same component, unchanged, because
+        -- fail-closed means a rename would otherwise reject the whole manifest, not just the
+        -- one element.
+        "GroupedTable" ->
+            Just CountPills
+
         "FindingsTable" ->
-            Just GroupedTable
+            Just CountPills
 
         "Iframe" ->
             Just Iframe
@@ -524,7 +631,7 @@ parseComponentType name =
 {-| Decode the strict per-component props. `props` is decoded against an empty object
 when absent, so the strict body decoder still runs (and still fails-closed when a
 required field like `Text.value` is missing). Unknown prop keys are **rejected** per
-component (a stray `disabled` on a Button must fail, not render an enabled button).
+component (a stray `visible` on a Button must fail, not render an unconditionally visible one).
 -}
 propsDecoder : ComponentType -> Decoder Props
 propsDecoder ct =
@@ -560,13 +667,13 @@ allowedPropKeys ct =
             [ "value", "variant" ]
 
         Button ->
-            [ "label", "icon" ]
+            [ "label", "icon", "disabled" ]
 
         Checkbox ->
             [ "label", "checked" ]
 
-        GroupedTable ->
-            [ "bind", "groupBy" ]
+        CountPills ->
+            [ "bind", "groupBy", "groupOrder", "itemNoun", "itemNounPlural", "emptyLabel" ]
 
         Iframe ->
             [ "src", "title" ]
@@ -613,19 +720,24 @@ propsBodyDecoder ct =
                 (optionalField "variant" (Decode.map Just Expr.decoder) Nothing)
 
         Button ->
-            Decode.map2 (\l i -> ButtonP (ButtonProps l i))
+            Decode.map3 (\l i d -> ButtonP (ButtonProps l i d))
                 (Decode.field "label" Expr.decoder)
                 (optionalField "icon" (Decode.map Just iconDecoder) Nothing)
+                (optionalField "disabled" (Decode.map Just Expr.decoder) Nothing)
 
         Checkbox ->
             Decode.map2 (\l c -> CheckboxP (CheckboxProps l c))
                 (optionalField "label" (Decode.map Just Expr.decoder) Nothing)
                 (optionalField "checked" (Decode.map Just Expr.decoder) Nothing)
 
-        GroupedTable ->
-            Decode.map2 (\b g -> GroupedTableP (GroupedTableProps b g))
+        CountPills ->
+            Decode.map6 (\b g o n np e -> CountPillsP (CountPillsProps b g o n np e))
                 (Decode.field "bind" Expr.decoder)
-                (optionalField "groupBy" Decode.string "severity")
+                (optionalField "groupBy" (Decode.map Just Decode.string) Nothing)
+                (optionalField "groupOrder" (Decode.map Just (Decode.list Decode.string)) Nothing)
+                (optionalField "itemNoun" (Decode.map Just Decode.string) Nothing)
+                (optionalField "itemNounPlural" (Decode.map Just Decode.string) Nothing)
+                (optionalField "emptyLabel" (Decode.map Just Expr.decoder) Nothing)
 
         Iframe ->
             Decode.map2 (\s t -> IframeP (IframeProps s t))
@@ -689,7 +801,7 @@ iconDecoder =
                     Decode.succeed s
 
                 else
-                    Decode.fail ("Unknown Button icon: `" ++ s ++ "`")
+                    Decode.fail (unknownIconMarker ++ ": `" ++ s ++ "`")
             )
 
 

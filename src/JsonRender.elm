@@ -17,8 +17,8 @@ Typical host wiring:
 
     case JsonRender.decodeValue manifestJson of
         Ok spec ->
-            -- mount the renderer, feeding the iframe origin allowlist + host-owned state
-            Html.map RendererMsg (JsonRender.Render.view allowedOrigins spec hostState rendererModel)
+            -- mount the renderer, feeding host options + host-owned state
+            Html.map RendererMsg (JsonRender.Render.view options spec hostState rendererModel)
 
         Err message ->
             JsonRender.errorStub message
@@ -63,6 +63,12 @@ decodeString raw =
 
 {-| The fail-closed failure view: a self-contained error stub the host renders instead of
 a manifest that did not validate. Never a partial tree.
+
+It prints the decoder's diagnostic verbatim, which suits a developer host and does not suit an
+end user. A host with a real audience should classify the failure with
+[`Spec.errorKind`](JsonRender-Spec#errorKind) and write its own copy instead. This stays the right
+default for a host that has none.
+
 -}
 errorStub : String -> Html msg
 errorStub message =

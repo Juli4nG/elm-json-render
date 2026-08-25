@@ -100,10 +100,13 @@ cardJson =
       "children": []
     },
     "results": {
-      "type": "GroupedTable",
+      "type": "CountPills",
       "props": {
         "bind": { "$state": "/results" },
-        "groupBy": "severity"
+        "groupBy": "severity",
+        "groupOrder": ["critical", "high", "medium", "low", "info"],
+        "itemNoun": "finding",
+        "itemNounPlural": "findings"
       },
       "children": []
     }

@@ -2,7 +2,8 @@ module JsonRender.Render exposing
     ( Model, init
     , Msg, update
     , Effect(..)
-    , view
+    , Options, CountPillDefaults, defaultOptions, view
+    , badgeTone
     )
 
 {-| Render a validated [`Spec`](JsonRender-Spec#Spec) to `Html`, driven by host-owned
@@ -35,7 +36,12 @@ tree is **XSS-safe by construction**.
 
 # View
 
-@docs view
+@docs Options, CountPillDefaults, defaultOptions, view
+
+
+# Styling hooks
+
+@docs badgeTone
 
 -}
 
@@ -163,27 +169,72 @@ emitAction emit =
 -- VIEW
 
 
-{-| Render the spec against the current host-owned `state`. The returned `Html Msg`
-includes the confirm dialog overlay when one is pending.
+{-| What the host tells the renderer about itself.
 
-`allowedOrigins` is the host-provided iframe origin allowlist: an `Iframe` element renders
-only when its resolved `src` is an https URL whose origin is an exact member of this list.
-An empty list disables all iframes (fail-closed).
+  - `allowedIframeOrigins` — the iframe origin allowlist: an `Iframe` element renders only when
+    its resolved `src` is an https URL whose origin is an exact member of this list. An empty
+    list disables all iframes (fail-closed).
+  - `countPills` — the vocabulary a `CountPills` element falls back to.
 
 -}
-view : List String -> Spec -> Value -> Model -> Html Msg
-view allowedOrigins spec state (Model model) =
+type alias Options =
+    { allowedIframeOrigins : List String
+    , countPills : CountPillDefaults
+    }
+
+
+{-| The words a `CountPills` element uses when its manifest does not name its own.
+
+The renderer counts rows and groups them; it has no opinion about what a row is. A host does:
+it knows what one row is called, which field groups them, and which group belongs at the front. A
+manifest published before `CountPills` could carry those keys cannot say so itself, so the host
+that mounts the renderer supplies them and its already-published manifests keep reading correctly.
+
+  - `groupBy` — the record field to group rows on.
+  - `groupOrder` — group values in display order. Anything outside the list sorts after the
+    listed ones by descending count then name, which is what an empty list does to everything.
+  - `itemNoun` / `itemNounPlural` — what one row and many rows are called.
+
+-}
+type alias CountPillDefaults =
+    { groupBy : String
+    , groupOrder : List String
+    , itemNoun : String
+    , itemNounPlural : String
+    }
+
+
+{-| Options for a host that has no vocabulary of its own: no iframes, no group order (so counts
+fall back to descending), and rows that are simply "items".
+-}
+defaultOptions : Options
+defaultOptions =
+    { allowedIframeOrigins = []
+    , countPills =
+        { groupBy = "group"
+        , groupOrder = []
+        , itemNoun = "item"
+        , itemNounPlural = "items"
+        }
+    }
+
+
+{-| Render the spec against the current host-owned `state`. The returned `Html Msg`
+includes the confirm dialog overlay when one is pending.
+-}
+view : Options -> Spec -> Value -> Model -> Html Msg
+view opts spec state (Model model) =
     Html.div [ Attr.class "jr-root" ]
-        [ renderElement spec (Expr.rootContext allowedOrigins state) spec.root
+        [ renderElement opts spec (Expr.rootContext opts.allowedIframeOrigins state) spec.root
         , confirmOverlay model.pendingConfirm
         ]
 
 
-renderElement : Spec -> Context -> String -> Html Msg
-renderElement spec ctx id =
+renderElement : Options -> Spec -> Context -> String -> Html Msg
+renderElement opts spec ctx id =
     case Dict.get id spec.elements of
         Just element ->
-            renderUIElement spec ctx element
+            renderUIElement opts spec ctx element
 
         Nothing ->
             -- Cannot happen for a decoded spec (child refs are validated); fail-closed stub.
@@ -191,22 +242,22 @@ renderElement spec ctx id =
                 [ Html.text ("Missing element: " ++ id) ]
 
 
-renderUIElement : Spec -> Context -> UIElement -> Html Msg
-renderUIElement spec ctx element =
+renderUIElement : Options -> Spec -> Context -> UIElement -> Html Msg
+renderUIElement opts spec ctx element =
     let
         childrenHtml =
             case element.repeat of
                 Just repeat ->
-                    repeatChildren spec ctx element repeat
+                    repeatChildren opts spec ctx element repeat
 
                 Nothing ->
-                    List.map (renderElement spec ctx) element.children
+                    List.map (renderElement opts spec ctx) element.children
     in
-    renderComponent ctx element childrenHtml
+    renderComponent opts.countPills ctx element childrenHtml
 
 
-repeatChildren : Spec -> Context -> UIElement -> Repeat -> List (Html Msg)
-repeatChildren spec ctx element repeat =
+repeatChildren : Options -> Spec -> Context -> UIElement -> Repeat -> List (Html Msg)
+repeatChildren opts spec ctx element repeat =
     let
         items =
             arrayAt repeat.statePath ctx.state
@@ -216,13 +267,13 @@ repeatChildren spec ctx element repeat =
                 rowCtx =
                     Expr.childContext repeat.statePath index item ctx
             in
-            List.map (renderElement spec rowCtx) element.children
+            List.map (renderElement opts spec rowCtx) element.children
     in
     List.concat (List.indexedMap renderRow items)
 
 
-renderComponent : Context -> UIElement -> List (Html Msg) -> Html Msg
-renderComponent ctx element childrenHtml =
+renderComponent : CountPillDefaults -> Context -> UIElement -> List (Html Msg) -> Html Msg
+renderComponent countPillDefaults ctx element childrenHtml =
     case element.props of
         CardP props ->
             renderCard ctx props childrenHtml
@@ -243,8 +294,8 @@ renderComponent ctx element childrenHtml =
         CheckboxP props ->
             renderCheckbox ctx props
 
-        GroupedTableP props ->
-            renderGroupedTable ctx props
+        CountPillsP props ->
+            renderCountPills countPillDefaults ctx props
 
         IframeP props ->
             renderIframe ctx props
@@ -341,9 +392,15 @@ renderBadge ctx element props =
         [ Html.text label ]
 
 
-{-| Maps common status strings to a tone class; unrecognized values fall back to neutral.
+{-| Maps common run-state strings to a tone class; unrecognized values fall back to neutral.
 Keyed on the leading whitespace-delimited token so a value carrying a trailing detail suffix
 (e.g. `"running · 0:15"`, a counting-up elapsed) still maps to its state tone.
+
+The arms are that closed run-state vocabulary and nothing else. A publisher whose own vocabulary
+has a word this table does not know gets the neutral fall-through, and supplies a `variant` if it
+wants a specific tone — which is the mechanism that exists for exactly this, and is why no
+extension's private verb needs an arm of its own here.
+
 -}
 badgeTone : String -> String
 badgeTone state =
@@ -357,6 +414,12 @@ badgeTone state =
         "running" ->
             "info"
 
+        "stopping" ->
+            -- In flight like the two above, and toned the same on purpose: a run that has been
+            -- asked to stop has NOT stopped yet, and the neutral tone this used to fall through
+            -- to read as already-over, which is the one thing this state must not say.
+            "info"
+
         "done" ->
             "success"
 
@@ -367,87 +430,132 @@ badgeTone state =
             "neutral"
 
 
-{-| The leading token of a badge value: the first whitespace-delimited word. So `"running · 0:15"`
-tones as `"running"` while a plain `"done"` is unchanged. `String.words` (rather than a split on
-`" "`) also normalizes tabs, newlines and leading whitespace, so `" running"` still tones as
-`"running"`; an all-whitespace value falls back to itself (neutral).
+{-| The leading token of a badge value: the first whitespace-delimited word, minus a trailing
+ellipsis. So `"running · 0:15"` tones as `"running"` and `"stopping…"` tones as `"stopping"`,
+while a plain `"done"` is unchanged.
+
+`String.words` (rather than a split on `" "`) also normalizes tabs, newlines and leading
+whitespace, so `" running"` still tones as `"running"`; an all-whitespace value falls back to
+itself (neutral).
+
+The ellipsis is dropped because it is punctuation on the display word, not part of the state: a
+manifest that writes an in-flight state as `"stopping…"` means the same state as one that writes
+`"stopping"`, and toning the two differently would make the tone table depend on the publisher's
+typography.
+
 -}
 badgeToken : String -> String
 badgeToken state =
-    state |> String.words |> List.head |> Maybe.withDefault state
+    let
+        leading =
+            state |> String.words |> List.head |> Maybe.withDefault state
+    in
+    if String.endsWith "…" leading then
+        String.dropRight 1 leading
+
+    else
+        leading
 
 
-{-| Render a `Button`. Without an `icon` this is exactly what it always was: a `jr-button`
-carrying the resolved label as its only child.
+{-| Render a `Button`. A truthy `disabled` expression makes it inert three ways over: the native
+`disabled` attribute, a `jr-button--disabled` class for the host stylesheet, and **no press handler
+at all** — the last is the one that actually holds, since the others are only presentation.
 
-An `icon` puts a 16px glyph, drawn inline by the renderer, BEFORE the label and adds
-`jr-button--icon`. A non-empty label stays visible beside the glyph. An **empty** label makes the
-button icon-only (`jr-button--icon-only`), and then the renderer supplies `aria-label` and `title`
-itself, because a control whose whole meaning is a shape is unreadable to a screen reader and
-unlabeled on hover unless something names it. The manifest cannot name it: the icon set is closed,
-so the renderer knows the right word for each shape and the host does not have to repeat it.
+An **empty resolved `label` renders NOTHING**, the same rule an `Iframe` applies to an empty
+resolved `src`. The catalog has no `visible` prop (element-level visibility is deliberately refused),
+so resolving the label to `""` is how a manifest says "this action does not apply to this row" — a
+per-row `$cond` chain collapsing to the empty string. Emitting a button anyway produced an
+invisible control with a live press handler on every row the action did NOT apply to, which is a
+phantom clickable: the empty-label case is exactly the one where the press carries no id.
+
+The exclusion has to be structural, not a stylesheet rule. The badge equivalent IS CSS
+(`.jr-badge[data-state=""] { display: none }`) and that is fine, because a hidden badge is only
+unreadable — a hidden button is still clickable.
+
+An **`icon` is the one exception**, and the only one: a button carrying a glyph is visible and
+meaningful with no text at all, so `label: ""` + `icon` renders icon-only rather than nothing. That
+is a manifest saying "this control is a shape", not "this control does not apply". Suppression
+still works for icon buttons the same way it works everywhere else — a manifest that wants the
+control gone on some rows uses a row where the button is not emitted, not an empty label. The
+glyph makes the accessible name the renderer's job: an icon-only control the manifest cannot name
+would be invisible to a screen reader, so `aria-label` and `title` come from the icon set.
 
 -}
 renderButton : Context -> UIElement -> Spec.ButtonProps -> Html Msg
 renderButton ctx element props =
     let
-        handler =
-            case pressEmit ctx element of
-                Just emit ->
-                    [ pressClick emit ]
-
-                Nothing ->
-                    []
-
         label =
             Expr.resolveDisplay ctx props.label
 
         glyph =
             Maybe.andThen iconGlyph props.icon
+    in
+    case ( String.isEmpty label, glyph ) of
+        ( True, Nothing ) ->
+            Html.text ""
 
-        iconOnly =
-            case glyph of
-                Just _ ->
+        _ ->
+            let
+                isDisabled =
+                    props.disabled |> Maybe.map (Expr.resolveBool ctx) |> Maybe.withDefault False
+
+                handler =
+                    case ( isDisabled, pressEmit ctx element ) of
+                        ( False, Just emit ) ->
+                            [ pressClick emit ]
+
+                        _ ->
+                            []
+
+                disabledClass =
+                    if isDisabled then
+                        " jr-button--disabled"
+
+                    else
+                        ""
+
+                iconOnly =
                     String.isEmpty label
 
-                Nothing ->
-                    False
+                iconClass =
+                    case ( glyph, iconOnly ) of
+                        ( Nothing, _ ) ->
+                            ""
 
-        classes =
-            case glyph of
-                Nothing ->
-                    "jr-button"
+                        ( Just _, False ) ->
+                            " jr-button--icon"
 
-                Just _ ->
-                    if iconOnly then
-                        "jr-button jr-button--icon jr-button--icon-only"
+                        ( Just _, True ) ->
+                            " jr-button--icon jr-button--icon-only"
 
-                    else
-                        "jr-button jr-button--icon"
+                nameAttrs =
+                    case ( glyph, iconOnly ) of
+                        ( Just g, True ) ->
+                            [ Attr.attribute "aria-label" g.name, Attr.title g.name ]
 
-        nameAttrs =
-            case ( glyph, iconOnly ) of
-                ( Just g, True ) ->
-                    [ Attr.attribute "aria-label" g.name, Attr.title g.name ]
+                        _ ->
+                            []
 
-                _ ->
-                    []
+                children =
+                    case glyph of
+                        Nothing ->
+                            [ Html.text label ]
 
-        children =
-            case glyph of
-                Nothing ->
-                    [ Html.text label ]
+                        Just g ->
+                            if iconOnly then
+                                [ iconSvg g ]
 
-                Just g ->
-                    if iconOnly then
-                        [ iconSvg g ]
-
-                    else
-                        [ iconSvg g, Html.text label ]
-    in
-    Html.button
-        (Attr.class classes :: Attr.type_ "button" :: nameAttrs ++ handler)
-        children
+                            else
+                                [ iconSvg g, Html.text label ]
+            in
+            Html.button
+                (Attr.class ("jr-button" ++ iconClass ++ disabledClass)
+                    :: Attr.type_ "button"
+                    :: Attr.disabled isDisabled
+                    :: nameAttrs
+                    ++ handler
+                )
+                children
 
 
 {-| The closed icon set: the accessible name for each shape, and the path that draws it. The
@@ -455,7 +563,9 @@ names match [`Spec`](JsonRender-Spec)'s decoder, which rejects anything else, so
 unreachable through a decoded manifest — and if it were ever reached the button falls back to the
 plain label rendering rather than to a nameless empty control.
 
-The paths are Feather's, stroked rather than filled, on Feather's 24×24 grid.
+The paths are Feather's, stroked rather than filled, on Feather's 24×24 grid. They are written out
+here rather than imported so the renderer keeps no icon-library dependency: the catalog owns its
+glyphs the same way it owns its components.
 
 -}
 iconGlyph : String -> Maybe { key : String, name : String, path : String }
@@ -495,7 +605,9 @@ iconGlyph icon =
 
 {-| A glyph as inline SVG: 16px, `currentColor`, stroked, so it takes the button's own color in
 every theme without the host shipping an icon font or a sprite. `aria-hidden` keeps it out of the
-accessibility tree — the BUTTON carries the name, the drawing is decoration.
+accessibility tree — the BUTTON carries the name, the drawing is decoration. The `jr-icon--<name>`
+modifier is the host's per-glyph hook, so the stylesheet can give the destructive shape a
+destructive hover without the manifest saying so.
 -}
 iconSvg : { key : String, name : String, path : String } -> Html Msg
 iconSvg glyph =
@@ -646,29 +758,62 @@ renderCheckbox ctx props =
         )
 
 
-renderGroupedTable : Context -> Spec.GroupedTableProps -> Html Msg
-renderGroupedTable ctx props =
+{-| Render a `CountPills` element: one pill per group, or the empty state.
+
+The renderer counts and orders; the words are the publisher's. Each of `groupBy`, `groupOrder`,
+`itemNoun` and `itemNounPlural` comes from the manifest when it names one and from the host's
+[`CountPillDefaults`](#CountPillDefaults) when it does not, so a manifest published before those
+keys existed still reads in the vocabulary its host set.
+
+The empty state is the manifest's to name too. `emptyLabel` resolves to the text shown when there
+are no groups; absent it falls back to "No <plural> yet", and resolving to an empty string renders
+NO node at all (for a row that already says "failed" elsewhere, a second empty-state line would be
+double-messaging).
+
+-}
+renderCountPills : CountPillDefaults -> Context -> Spec.CountPillsProps -> Html Msg
+renderCountPills fallback ctx props =
     let
+        plural =
+            Maybe.withDefault fallback.itemNounPlural props.itemNounPlural
+
         groups =
             Expr.resolve ctx props.bind
                 |> decodeRows
-                |> groupRows props.groupBy
-                |> orderGroups
+                |> countByGroup (Maybe.withDefault fallback.groupBy props.groupBy)
+                |> orderGroups (Maybe.withDefault fallback.groupOrder props.groupOrder)
     in
     case groups of
         [] ->
-            Html.div [ Attr.class "jr-grouped-table jr-grouped-table--empty" ]
-                [ Html.text "No rows yet" ]
+            let
+                emptyLabel =
+                    props.emptyLabel
+                        |> Maybe.map (Expr.resolveDisplay ctx)
+                        |> Maybe.withDefault ("No " ++ plural ++ " yet")
+            in
+            if String.isEmpty emptyLabel then
+                Html.text ""
+
+            else
+                Html.div [ Attr.class "jr-counts jr-counts--empty" ]
+                    [ Html.text emptyLabel ]
 
         _ ->
             let
                 total =
                     List.sum (List.map Tuple.second groups)
+
+                noun =
+                    if total == 1 then
+                        Maybe.withDefault fallback.itemNoun props.itemNoun
+
+                    else
+                        plural
             in
-            Html.div [ Attr.class "jr-grouped-table" ]
-                (Html.span [ Attr.class "jr-grouped-table__total" ]
-                    [ Html.text (String.fromInt total ++ " total") ]
-                    :: List.map renderGroup groups
+            Html.div [ Attr.class "jr-counts" ]
+                (Html.span [ Attr.class "jr-counts__total" ]
+                    [ Html.text (String.fromInt total ++ " " ++ noun) ]
+                    :: List.map countPill groups
                 )
 
 
@@ -682,20 +827,20 @@ decodeRows value =
             |> Result.withDefault []
 
 
-{-| One group rendered as a pill: a colored dot, the count, then the label. The
-`jr-grouped-table__group--<label>` modifier drives the dot color from the host stylesheet.
+{-| One at-a-glance pill: a group-colored dot, the count, then the group. The
+`jr-counts__pill--<group>` modifier is what lets the host stylesheet tint the dot per group.
 -}
-renderGroup : ( String, Int ) -> Html Msg
-renderGroup ( label, count ) =
-    Html.span [ Attr.class ("jr-grouped-table__group jr-grouped-table__group--" ++ String.toLower label) ]
-        [ Html.span [ Attr.class "jr-grouped-table__dot" ] []
-        , Html.span [ Attr.class "jr-grouped-table__count" ] [ Html.text (String.fromInt count) ]
-        , Html.span [ Attr.class "jr-grouped-table__label" ] [ Html.text label ]
+countPill : ( String, Int ) -> Html Msg
+countPill ( label, count ) =
+    Html.span [ Attr.class ("jr-counts__pill jr-counts__pill--" ++ String.toLower label) ]
+        [ Html.span [ Attr.class "jr-counts__dot" ] []
+        , Html.span [ Attr.class "jr-counts__count" ] [ Html.text (String.fromInt count) ]
+        , Html.span [ Attr.class "jr-counts__label" ] [ Html.text label ]
         ]
 
 
-groupRows : String -> List (Dict.Dict String Value) -> List ( String, Int )
-groupRows groupBy rows =
+countByGroup : String -> List (Dict.Dict String Value) -> List ( String, Int )
+countByGroup groupBy rows =
     rows
         |> List.foldr
             (\row acc ->
@@ -711,20 +856,20 @@ groupRows groupBy rows =
         |> Dict.toList
 
 
-{-| Order grouped counts by a canonical severity rank (critical, high, medium, low, info)
-when the labels are recognized severities, dropping zero counts. Unrecognized labels sort
-after the known severities, by descending count then name, so a non-severity `groupBy` still
-renders sensibly.
+{-| Order the grouped counts by the publisher's `groupOrder` rather than alphabetically, dropping
+any zero counts. Groups the order does not name sort after the ones it does, by descending count
+then name — which is what an EMPTY order does to every group, and is the sensible reading of a
+grouping whose values the publisher never enumerated.
 -}
-orderGroups : List ( String, Int ) -> List ( String, Int )
-orderGroups =
+orderGroups : List String -> List ( String, Int ) -> List ( String, Int )
+orderGroups order =
     List.filter (\( _, count ) -> count > 0)
-        >> List.sortWith compareGroup
+        >> List.sortWith (compareGroup (groupRank order))
 
 
-compareGroup : ( String, Int ) -> ( String, Int ) -> Order
-compareGroup ( labelA, countA ) ( labelB, countB ) =
-    case ( severityRank labelA, severityRank labelB ) of
+compareGroup : (String -> Maybe Int) -> ( String, Int ) -> ( String, Int ) -> Order
+compareGroup rankOf ( labelA, countA ) ( labelB, countB ) =
+    case ( rankOf labelA, rankOf labelB ) of
         ( Just rankA, Just rankB ) ->
             compare rankA rankB
 
@@ -739,30 +884,21 @@ compareGroup ( labelA, countA ) ( labelB, countB ) =
                 EQ ->
                     compare labelA labelB
 
-                order ->
-                    order
+                order_ ->
+                    order_
 
 
-severityRank : String -> Maybe Int
-severityRank label =
-    case String.toLower label of
-        "critical" ->
-            Just 0
-
-        "high" ->
-            Just 1
-
-        "medium" ->
-            Just 2
-
-        "low" ->
-            Just 3
-
-        "info" ->
-            Just 4
-
-        _ ->
-            Nothing
+groupRank : List String -> String -> Maybe Int
+groupRank order label =
+    let
+        lowered =
+            String.toLower label
+    in
+    order
+        |> List.indexedMap (\index name -> ( String.toLower name, index ))
+        |> List.filter (\( name, _ ) -> name == lowered)
+        |> List.head
+        |> Maybe.map Tuple.second
 
 
 
@@ -895,7 +1031,7 @@ renderIframe ctx props =
         -- fragment changes, so without a keyed remount a fresh token would keep showing the
         -- stale page.
         Keyed.node "div"
-            [ Attr.class "jr-iframe" ]
+            [ Attr.class "jr-iframe", Attr.style "width" "100%" ]
             [ ( "provenance", provenanceBar url )
             , ( url
               , Html.div [ Attr.class "jr-iframe__frame" ]

@@ -346,7 +346,7 @@ view : Model -> Html Msg
 view model =
     Html.div [ Attr.class "demo" ]
         -- The demo embeds nothing, so the iframe origin allowlist is empty.
-        [ Html.map RendererMsg (Render.view [] model.spec (projection model) model.renderer) ]
+        [ Html.map RendererMsg (Render.view Render.defaultOptions model.spec (projection model) model.renderer) ]
 
 
 subscriptions : Model -> Sub Msg
