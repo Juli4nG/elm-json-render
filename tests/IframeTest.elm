@@ -54,7 +54,8 @@ stateWith embedUrl =
 
 
 {-| The renderer defaults, with only the origin allowlist filled in: everything about the iframe
-boundary is carried by `allowedIframeOrigins` alone.
+boundary is carried by `allowedIframeOrigins` alone, and `hostName` keeps its default so the
+provenance test below reads the unnamed-host copy.
 -}
 options : Render.Options
 options =
@@ -65,9 +66,22 @@ options =
     { base | allowedIframeOrigins = allowedOrigins }
 
 
+{-| The same options under a host that names itself.
+-}
+namedHostOptions : Render.Options
+namedHostOptions =
+    { options | hostName = "Exosphere" }
+
+
 render : String -> Query.Single Render.Msg
 render embedUrl =
     Render.view options (specOf iframeManifest) (stateWith embedUrl) Render.init
+        |> Query.fromHtml
+
+
+renderAs : Render.Options -> String -> Query.Single Render.Msg
+renderAs opts embedUrl =
+    Render.view opts (specOf iframeManifest) (stateWith embedUrl) Render.init
         |> Query.fromHtml
 
 
@@ -92,6 +106,34 @@ suite =
                         [ Selector.text
                             "Third-party content from https://1-2-3-4.sslip.io — not verified by the host application"
                         ]
+        , test "the host's own name is what the provenance bar disclaims on behalf of" <|
+            \_ ->
+                -- The bar is trust chrome: it has to name the app the reader is looking at, not a
+                -- generic stand-in, or the disclaimer is boilerplate they skim past.
+                renderAs namedHostOptions "https://1-2-3-4.sslip.io/app"
+                    |> Query.find [ Selector.class "jr-iframe__provenance" ]
+                    |> Query.has
+                        [ Selector.text
+                            "Third-party content from https://1-2-3-4.sslip.io — not verified by Exosphere"
+                        ]
+        , test "hostName is host-owned: no manifest prop reaches the provenance copy" <|
+            \_ ->
+                -- Guards the boundary rather than the string: an `Iframe` carrying a `hostName`
+                -- prop is refused outright, so the embedded party can never write the sentence
+                -- disclaiming itself.
+                JsonRender.decodeString
+                    """
+                    { "root": "frame"
+                    , "elements":
+                        { "frame":
+                            { "type": "Iframe"
+                            , "props": { "src": "https://1-2-3-4.sslip.io", "title": "x", "hostName": "Totally Trusted Inc" }
+                            }
+                        }
+                    }
+                    """
+                    |> isOk
+                    |> Expect.equal False
         , test "an https src whose origin is NOT allowlisted renders no iframe" <|
             \_ ->
                 render "https://evil.example.com/app"

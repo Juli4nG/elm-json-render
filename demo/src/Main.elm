@@ -345,8 +345,21 @@ instanceProjection model instance =
 view : Model -> Html Msg
 view model =
     Html.div [ Attr.class "demo" ]
-        -- The demo embeds nothing, so the iframe origin allowlist is empty.
-        [ Html.map RendererMsg (Render.view Render.defaultOptions model.spec (projection model) model.renderer) ]
+        [ Html.map RendererMsg (Render.view options model.spec (projection model) model.renderer) ]
+
+
+{-| What this demo tells the renderer about itself. The card carries its own `CountPills`
+vocabulary, so the defaults under `countPills` never come up here; `hostName` does, as the name
+the iframe provenance bar would disclaim on behalf of. The demo embeds nothing, so the origin
+allowlist stays empty and no iframe ever renders.
+-}
+options : Render.Options
+options =
+    let
+        base =
+            Render.defaultOptions
+    in
+    { base | hostName = "the elm-json-render demo" }
 
 
 subscriptions : Model -> Sub Msg

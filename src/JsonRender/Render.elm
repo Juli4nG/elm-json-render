@@ -174,11 +174,16 @@ emitAction emit =
   - `allowedIframeOrigins` — the iframe origin allowlist: an `Iframe` element renders only when
     its resolved `src` is an https URL whose origin is an exact member of this list. An empty
     list disables all iframes (fail-closed).
+  - `hostName` — what the iframe provenance bar calls you, as in "not verified by `<hostName>`".
+    The bar is trust chrome, so the name has to be the one a reader recognizes; a generic
+    "the host application" is a weaker claim than naming the app they are looking at. A manifest
+    cannot reach this, which is the point.
   - `countPills` — the vocabulary a `CountPills` element falls back to.
 
 -}
 type alias Options =
     { allowedIframeOrigins : List String
+    , hostName : String
     , countPills : CountPillDefaults
     }
 
@@ -193,6 +198,7 @@ that mounts the renderer supplies them and its already-published manifests keep 
   - `groupBy` — the record field to group rows on.
   - `groupOrder` — group values in display order. Anything outside the list sorts after the
     listed ones by descending count then name, which is what an empty list does to everything.
+    Matching is case-insensitive, and a value listed more than once takes its FIRST position.
   - `itemNoun` / `itemNounPlural` — what one row and many rows are called.
 
 -}
@@ -204,12 +210,13 @@ type alias CountPillDefaults =
     }
 
 
-{-| Options for a host that has no vocabulary of its own: no iframes, no group order (so counts
-fall back to descending), and rows that are simply "items".
+{-| Options for a host that has no vocabulary of its own: no iframes, an unnamed host, no group
+order (so counts fall back to descending), and rows that are simply "items".
 -}
 defaultOptions : Options
 defaultOptions =
     { allowedIframeOrigins = []
+    , hostName = "the host application"
     , countPills =
         { groupBy = "group"
         , groupOrder = []
@@ -253,7 +260,7 @@ renderUIElement opts spec ctx element =
                 Nothing ->
                     List.map (renderElement opts spec ctx) element.children
     in
-    renderComponent opts.countPills ctx element childrenHtml
+    renderComponent opts ctx element childrenHtml
 
 
 repeatChildren : Options -> Spec -> Context -> UIElement -> Repeat -> List (Html Msg)
@@ -272,8 +279,8 @@ repeatChildren opts spec ctx element repeat =
     List.concat (List.indexedMap renderRow items)
 
 
-renderComponent : CountPillDefaults -> Context -> UIElement -> List (Html Msg) -> Html Msg
-renderComponent countPillDefaults ctx element childrenHtml =
+renderComponent : Options -> Context -> UIElement -> List (Html Msg) -> Html Msg
+renderComponent opts ctx element childrenHtml =
     case element.props of
         CardP props ->
             renderCard ctx props childrenHtml
@@ -295,10 +302,10 @@ renderComponent countPillDefaults ctx element childrenHtml =
             renderCheckbox ctx props
 
         CountPillsP props ->
-            renderCountPills countPillDefaults ctx props
+            renderCountPills opts.countPills ctx props
 
         IframeP props ->
-            renderIframe ctx props
+            renderIframe opts.hostName ctx props
 
         TableP props ->
             renderTable ctx props
@@ -765,9 +772,10 @@ The renderer counts and orders; the words are the publisher's. Each of `groupBy`
 [`CountPillDefaults`](#CountPillDefaults) when it does not, so a manifest published before those
 keys existed still reads in the vocabulary its host set.
 
-The empty state is the manifest's to name too. `emptyLabel` resolves to the text shown when there
-are no groups; absent it falls back to "No <plural> yet", and resolving to an empty string renders
-NO node at all (for a row that already says "failed" elsewhere, a second empty-state line would be
+The empty state is the manifest's to name too, and it is the one key with NO host default:
+`emptyLabel` resolves to the text shown when there are no groups; absent, the renderer synthesizes
+"No <plural> yet" from whichever plural is in play, and resolving to an empty string renders NO
+node at all (for a row that already says "failed" elsewhere, a second empty-state line would be
 double-messaging).
 
 -}
@@ -1005,14 +1013,15 @@ but disallowed** src (non-https scheme, unparseable URL, or off-allowlist origin
 benign security placeholder instead.
 
 When it does render, the frame is always preceded by a `jr-iframe__provenance` bar naming
-the embedded origin. The bar is emitted unconditionally by the renderer, with no prop to
-suppress it, so a manifest cannot hide that the content is unverified third-party. The
-`<iframe>` sits inside a `jr-iframe__frame` wrapper meant to carry a distinct border in the
-host stylesheet, keyed by the resolved `src` so a changed URL remounts the frame.
+the embedded origin and the host disclaiming it (`Options.hostName`). The bar is emitted
+unconditionally by the renderer, with no prop to suppress it, so a manifest cannot hide that
+the content is unverified third-party. The `<iframe>` sits inside a `jr-iframe__frame` wrapper
+meant to carry a distinct border in the host stylesheet, keyed by the resolved `src` so a
+changed URL remounts the frame.
 
 -}
-renderIframe : Context -> Spec.IframeProps -> Html Msg
-renderIframe ctx props =
+renderIframe : String -> Context -> Spec.IframeProps -> Html Msg
+renderIframe hostName ctx props =
     let
         url =
             Expr.resolveDisplay ctx props.src
@@ -1032,7 +1041,7 @@ renderIframe ctx props =
         -- stale page.
         Keyed.node "div"
             [ Attr.class "jr-iframe", Attr.style "width" "100%" ]
-            [ ( "provenance", provenanceBar url )
+            [ ( "provenance", provenanceBar hostName url )
             , ( url
               , Html.div [ Attr.class "jr-iframe__frame" ]
                     [ iframeElement ctx props url ]
@@ -1044,17 +1053,25 @@ renderIframe ctx props =
             [ Html.text "Embedded content is unavailable." ]
 
 
-{-| The always-on provenance chrome: a slim bar naming the embedded origin, rendered above
-the frame. Not suppressible from a manifest. Host stylesheets may restyle `jr-iframe__provenance`
-but the bar is structurally present whenever an iframe renders.
+{-| The always-on provenance chrome: a slim bar naming the embedded origin and the host that
+disclaims it, rendered above the frame. Not suppressible from a manifest. Host stylesheets may
+restyle `jr-iframe__provenance` but the bar is structurally present whenever an iframe renders.
+
+The host's own name comes from [`Options`](#Options) rather than being a fixed phrase, because a
+disclaimer reads as a promise from whoever is named in it: "not verified by Exosphere" is a
+claim a reader can act on, "not verified by the host application" is boilerplate they will skim.
+It is not manifest-reachable — the embedded party never gets to write the sentence disclaiming
+itself.
+
 -}
-provenanceBar : String -> Html Msg
-provenanceBar url =
+provenanceBar : String -> String -> Html Msg
+provenanceBar hostName url =
     Html.div [ Attr.class "jr-iframe__provenance" ]
         [ Html.text
             ("Third-party content from "
                 ++ iframeOrigin url
-                ++ " — not verified by the host application"
+                ++ " — not verified by "
+                ++ hostName
             )
         ]
 
