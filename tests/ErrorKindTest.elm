@@ -78,6 +78,21 @@ suite =
                 -- this must not be reported as version skew.
                 kindOf """{ "root": "s", "elements": { "s": { "type": "Stack", "props": { "direction": "sideways" }, "children": [] } } }"""
                     |> Expect.equal (Ok Spec.Malformed)
+        , test "a marker string carried as DATA spoofs the classification" <|
+            \_ ->
+                -- Pinning the documented limitation, not endorsing it. `Decode.errorToString`
+                -- prints the offending JSON, so a malformed manifest whose own data quotes one of
+                -- the markers is read as skew. The cost is which reassuring sentence the reader
+                -- gets; both kinds still refuse to render, which is the part that matters. This
+                -- test exists so removing the limitation is a deliberate change with a failing
+                -- test attached, rather than a silent one.
+                kindOf """{ "root": "t", "elements": { "t": { "type": "Text", "props": { "value": "Unknown / off-catalog component type" }, "extra": 1 } } }"""
+                    |> Expect.equal (Ok Spec.UnknownCatalogSurface)
+        , test "the same manifest without the marker text classifies as malformed" <|
+            \_ ->
+                -- The control for the spoof above: identical shape, innocuous data.
+                kindOf """{ "root": "t", "elements": { "t": { "type": "Text", "props": { "value": "hello" }, "children": "not-a-list" } } }"""
+                    |> Expect.equal (Ok Spec.Malformed)
         , test "an unsupported $-directive reads as malformed, not as skew" <|
             \_ ->
                 -- Arguable either way; pinned so the classification is a decision and not an

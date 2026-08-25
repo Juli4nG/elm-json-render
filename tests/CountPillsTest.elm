@@ -43,6 +43,7 @@ that hands the renderer its own vocabulary through `Render.Options`.
 severityOptions : Render.Options
 severityOptions =
     { allowedIframeOrigins = []
+    , hostName = "the host application"
     , countPills =
         { groupBy = "severity"
         , groupOrder = [ "critical", "high", "medium", "low", "info" ]
@@ -138,6 +139,84 @@ noRowsState =
 nullState : Encode.Value
 nullState =
     Encode.object [ ( "results", Encode.null ) ]
+
+
+{-| Every optional `CountPills` prop, present but malformed. Each must reject the whole manifest
+rather than decoding as absent, which is what an Elm decoder does by default and what 2.x did at
+this element.
+
+The distinction matters most for `groupBy` and `emptyLabel`: treated as absent, a malformed one
+silently falls back to the host's vocabulary, so a publisher's typo ships as a table that counts
+the wrong field or reassures with the wrong sentence, with nothing anywhere saying so.
+
+-}
+malformedProps : List ( String, String )
+malformedProps =
+    [ ( "a null groupBy is rejected, not read as absent"
+      , """, "groupBy": null """
+      )
+    , ( "a non-string groupBy is rejected"
+      , """, "groupBy": 7 """
+      )
+    , ( "a null groupOrder is rejected"
+      , """, "groupOrder": null """
+      )
+    , ( "a groupOrder that is not a list is rejected"
+      , """, "groupOrder": "critical" """
+      )
+    , ( "a groupOrder carrying a non-string MEMBER is rejected"
+      , """, "groupOrder": [ "critical", 3 ] """
+      )
+    , ( "a groupOrder carrying a null member is rejected"
+      , """, "groupOrder": [ "critical", null ] """
+      )
+    , ( "a null itemNoun is rejected"
+      , """, "itemNoun": null """
+      )
+    , ( "a non-string itemNoun is rejected"
+      , """, "itemNoun": true """
+      )
+    , ( "a null itemNounPlural is rejected"
+      , """, "itemNounPlural": null """
+      )
+    , ( "a non-string itemNounPlural is rejected"
+      , """, "itemNounPlural": [ "findings" ] """
+      )
+    , ( "an emptyLabel carrying an unsupported directive is rejected"
+      , """, "emptyLabel": { "$computed": "summarize" } """
+      )
+    , ( "an emptyLabel carrying a malformed directive is rejected"
+      , """, "emptyLabel": { "$item": 3 } """
+      )
+    , ( "an emptyLabel directive with extra siblings is rejected"
+      , """, "emptyLabel": { "$state": "/x", "junk": true } """
+      )
+    ]
+
+
+{-| The well-formed counterpart of each shape above, so a decoder that rejected everything
+outright could not pass the table.
+-}
+wellFormedProps : List String
+wellFormedProps =
+    [ """, "groupBy": "severity" """
+    , """, "groupOrder": [ "critical", "high" ] """
+    , """, "groupOrder": [] """
+    , """, "itemNoun": "finding" """
+    , """, "itemNounPlural": "findings" """
+    , """, "emptyLabel": "No vulnerabilities found" """
+    , """, "emptyLabel": { "$state": "/message" } """
+    ]
+
+
+resultOk : Result e a -> Bool
+resultOk result =
+    case result of
+        Ok _ ->
+            True
+
+        Err _ ->
+            False
 
 
 conditionalEmptyLabel : String
@@ -302,6 +381,22 @@ suite =
                         oneHighState
                         |> Query.has [ Selector.text "1 finding", Selector.text "high" ]
             ]
+        , describe "optional does not mean lenient"
+            (malformedProps
+                |> List.map
+                    (\( label, prop ) ->
+                        test label <|
+                            \_ ->
+                                JsonRender.decodeString (tableWith prop)
+                                    |> Result.map (always "accepted")
+                                    |> Expect.err
+                    )
+            )
+        , test "the well-formed shapes those cases vary from all still decode (guards the table)" <|
+            \_ ->
+                wellFormedProps
+                    |> List.map (tableWith >> JsonRender.decodeString >> resultOk)
+                    |> Expect.equal (List.map (always True) wellFormedProps)
         , describe "deprecated wire names"
             [ test "`GroupedTable` (the 2.x name) still decodes to CountPills" <|
                 \_ ->
