@@ -12,8 +12,8 @@ or it is rejected with a diagnostic and nothing renders. There is no `innerHTML`
 escape hatch, and no "unknown component, skip it" fallback. If you are rendering UI you did
 not write yourself, that strictness is the point.
 
-**Status:** v2. Decoders, expression and binding resolution, renderers, a small TEA host
-interface, 188 passing tests, a runnable demo, and a browser-based conformance snapshot.
+**Status:** v3. Decoders, expression and binding resolution, renderers, a small TEA host
+interface, 237 passing tests, a runnable demo, and a browser-based conformance snapshot.
 Pinned to the wire format of `@json-render/core` v0.19.0.
 
 ## Why
@@ -141,19 +141,32 @@ view model =
     case model.spec of
         Ok spec ->
             Html.map RendererMsg
-                (Render.view allowedOrigins spec model.hostState model.renderer)
+                (Render.view options spec model.hostState model.renderer)
 
         Err message ->
             JsonRender.errorStub message
 
 
-{-| The iframe origin allowlist. An `Iframe` element renders only when its resolved `src`
-is an https URL whose origin is an exact member of this list. Keep it `[]` unless you
-deliberately embed something.
+{-| What you tell the renderer about yourself.
+
+`allowedIframeOrigins` is the iframe origin allowlist: an `Iframe` element renders only
+when its resolved `src` is an https URL whose origin is an exact member of this list.
+Keep it `[]` unless you deliberately embed something.
+
+`countPills` is the vocabulary a `CountPills` element falls back to when the manifest does
+not name its own. `Render.defaultOptions` is exactly this record, so start there and
+override the fields you care about.
 -}
-allowedOrigins : List String
-allowedOrigins =
-    []
+options : Render.Options
+options =
+    { allowedIframeOrigins = []
+    , countPills =
+        { groupBy = "severity"
+        , groupOrder = [ "critical", "high", "medium", "low", "info" ]
+        , itemNoun = "finding"
+        , itemNounPlural = "findings"
+        }
+    }
 ```
 
 The renderer emits plain `Html` with `jr-*` classes and no styling of its own; you supply
@@ -216,6 +229,63 @@ so the renderer does; the alternative is a control that is invisible to a screen
 Sizing and hover tone are yours, as with every `jr-*` class. A button with no `icon` renders
 exactly what it always did.
 
+## Disabled and absent buttons
+
+`Button` takes an optional `disabled` expression. When it resolves truthy the button gets the
+native `disabled` attribute, a `jr-button--disabled` class, and **no press handler at all**. The
+last one is the part that holds; the other two are presentation.
+
+```json
+"cancel": {
+  "type": "Button",
+  "props": { "label": "Cancel", "disabled": { "$state": "/busy" } },
+  "on": { "press": { "action": "run.cancel", "params": {} } }
+}
+```
+
+An **empty resolved label with no icon renders nothing at all**. The catalog has no `visible`
+prop on purpose, so collapsing the label to `""` is the only way a manifest can say "this action
+does not apply to this row" — typically a per-row `$cond`. Emitting a button anyway would leave
+an invisible control with a live handler on exactly the rows where the press carries no id.
+
+Disabled and absent are different states: disabled means "here but unavailable" and stays where
+the eye expects it, empty-label means "not applicable" and goes away.
+
+## Counting rows
+
+`CountPills` takes an array of records and renders a total plus one pill per group. The renderer
+counts and orders; the words are yours.
+
+```json
+"results": {
+  "type": "CountPills",
+  "props": {
+    "bind": { "$state": "/results" },
+    "groupBy": "severity",
+    "groupOrder": ["critical", "high", "medium", "low", "info"],
+    "itemNoun": "finding",
+    "itemNounPlural": "findings",
+    "emptyLabel": "No vulnerabilities found"
+  }
+}
+```
+
+Every key but `bind` is optional, and each one falls back to the `countPills` field of your
+`Render.Options`. That split is what lets a manifest published before these keys existed keep
+rendering in your vocabulary rather than in the renderer's.
+
+Groups your `groupOrder` does not name sort after the ones it does, by descending count then
+name, which is also what an empty order does to everything. Zero counts are dropped.
+
+`emptyLabel` is what an empty table says. Absent, it falls back to "No `<plural>` yet", which is
+right for a table with nothing bound yet and wrong for a completed, genuinely empty one — only
+the publisher knows which, so it supplies the string. Resolving it to the empty string renders no
+empty-state node at all.
+
+Markup is `div.jr-counts` with a `span.jr-counts__total` and one
+`span.jr-counts__pill.jr-counts__pill--<group>` per group, each holding a `__dot`, a `__count`
+and a `__label`. The per-group modifier is your hook for tinting the dot.
+
 ## How validation works
 
 Decoding is the security gate. The decoder rejects, rather than silently dropping:
@@ -232,6 +302,19 @@ A rejected manifest never produces a partial tree. You get an `Err` with a diagn
 `errorStub` gives you a self-contained fallback view. Note that this is deliberately stricter
 than json-render's own renderers, which warn and skip on unknown input.
 
+`errorStub` prints the decoder's diagnostic verbatim, which suits a developer and does not suit
+an end user. If your host has a real audience, pass the message to `Spec.errorKind` and write
+your own copy:
+
+- `UnknownCatalogSurface` — the manifest named a component type, a prop key or an icon this
+  build does not have. The honest reading is that the publisher is describing an interface a
+  newer renderer would understand, so "this app may need updating" is a real thing to say.
+- `Malformed` — everything else. Nothing suggests a newer renderer would fare better, so the
+  message should say the refusal is deliberate and point at the publisher.
+
+The classifier lives next to the `Decode.fail` arms it classifies and reads the same strings
+those arms are built from, so rewording a diagnostic cannot silently break it.
+
 Actions are inert by design. The renderer never navigates, fetches, or executes anything.
 Every action surfaces to the host as an `Effect`, and the host decides what runs.
 
@@ -239,17 +322,18 @@ Every action surfaces to the host as an `Effect`, and the host decides what runs
 
 - `JsonRender`: the entry point. `decodeValue` / `decodeString` (strict validation) and
   `errorStub` (the failure view).
-- `JsonRender.Spec`: the typed spec model and its decoders.
+- `JsonRender.Spec`: the typed spec model and its decoders, plus `errorKind` for turning a
+  decode failure into a sentence a reader can act on.
 - `JsonRender.Expr`: the expression dialect (`$state`, `$item`, `$index`, `$bindState`,
   `$bindItem`, `$template`, `$cond`) with RFC 6901 JSON Pointer resolution.
 - `JsonRender.Render`: the TEA renderer (`Model` / `init` / `Msg` / `update` / `Effect` /
-  `view`).
+  `Options` / `view`).
 
 ## Supported subset
 
-Components: `Card`, `Stack`, `Text`, `Badge`, `Button`, `Checkbox`, `GroupedTable`
-(a grouped summary table), `Table`, `Alert`, `Disclosure`, and `Iframe` (origin-pinned to a
-host-supplied allowlist), plus the `repeat` field for iterating a state array. Expressions:
+Components: `Card`, `Stack`, `Text`, `Badge`, `Button`, `Checkbox`, `CountPills`
+(a counted, grouped pill summary), `Table`, `Alert`, `Disclosure`, and `Iframe` (origin-pinned
+to a host-supplied allowlist), plus the `repeat` field for iterating a state array. Expressions:
 the seven `$` forms listed above, `$cond` included. Anything outside this subset fails the
 decode.
 
@@ -262,7 +346,7 @@ stock ones.
 ```sh
 elm make                                          # type-check the package
 elm-format --validate src/ tests/
-elm-test-rs                                       # unit + program tests (188 tests)
+elm-test-rs                                       # unit + program tests (237 tests)
 cd conformance && npm install && npm run capture  # demo build + golden snapshot
 ```
 

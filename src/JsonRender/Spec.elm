@@ -771,23 +771,6 @@ columnDecoder =
         )
 
 
-directionDecoder : Decoder Direction
-directionDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\s ->
-                case s of
-                    "row" ->
-                        Decode.succeed Row
-
-                    "col" ->
-                        Decode.succeed Col
-
-                    other ->
-                        Decode.fail ("Unknown Stack direction: `" ++ other ++ "`")
-            )
-
-
 {-| A `Button`'s `icon` name, closed over the four shapes the renderer knows how to draw. A
 manifest naming anything else is refused rather than rendered without a glyph, so a typo surfaces
 as a decode error instead of as a control that silently lost its meaning.
@@ -822,6 +805,23 @@ toneDecoder =
 
                     other ->
                         Decode.fail ("Unknown Alert tone: `" ++ other ++ "`")
+            )
+
+
+directionDecoder : Decoder Direction
+directionDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\s ->
+                case s of
+                    "row" ->
+                        Decode.succeed Row
+
+                    "col" ->
+                        Decode.succeed Col
+
+                    other ->
+                        Decode.fail ("Unknown Stack direction: `" ++ other ++ "`")
             )
 
 

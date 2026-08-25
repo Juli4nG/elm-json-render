@@ -14,20 +14,21 @@ fail-closed stance, "not supported" almost always means **the decoder rejects it
 | `Card`          | ✅ | optional `title` expr |
 | `Stack`         | ✅ | `direction` (`row`/`col`), `gap`; carries `repeat`; honors `on.press` (see *Pressable elements*) |
 | `Text`          | ✅ | required `value` expr; honors `on.press` (see *Pressable elements*) |
-| `Badge`         | ✅ | `value` expr; optional `variant` expr drives the `data-state` styling token (the tone class stays keyed on the display text). Tone map idle→neutral, queued/running→info, done→success, error→danger, keyed on the leading whitespace-delimited token. Honors `on.press` (see *Pressable elements*) |
-| `Button`        | ✅ | `label` expr; optional `icon` name; `on.press` action |
+| `Badge`         | ✅ | `value` expr; optional `variant` expr drives the `data-state` styling token (the tone class stays keyed on the display text). Tone map idle→neutral, queued/running/stopping→info, done→success, error→danger, keyed on the leading whitespace-delimited token minus a trailing ellipsis. Exposed as `Render.badgeTone`. Honors `on.press` (see *Pressable elements*) |
+| `Button`        | ✅ | `label` expr; optional `icon` name; optional `disabled` expr (truthy ⇒ native `disabled`, `jr-button--disabled`, no press handler); `on.press` action. An empty resolved `label` with no `icon` renders nothing at all |
 | `Checkbox`      | ✅ | optional `label`, optional two-way `checked` |
-| `GroupedTable`  | ⚠️ | `bind` + `groupBy`; renders empty-state when `null`, else groups by field. The row-payload schema is intentionally loose; the table groups rows by a string field and counts them. |
+| `CountPills`    | ⚠️ | required `bind`; optional `groupBy`, `groupOrder`, `itemNoun`, `itemNounPlural`, `emptyLabel`, each falling back to the host's `Render.Options.countPills`. Renders a total plus one pill per group, zero counts dropped; unranked groups sort by descending count then name. `emptyLabel` resolving to `""` renders no empty-state node. The row-payload schema is intentionally loose; rows are grouped by a string field and counted. |
 | `Table`         | ✅ | required `columns` (each exactly `key` + `label`) + `bind`; renders a plain row table |
 | `Alert`         | ✅ | required `tone` (`info`/`warning`/`danger`) + `message` expr; optional `title` expr |
 | `Disclosure`    | ✅ | required `label` expr; optional `open` bool (default `false`) |
-| `Iframe`        | ⚠️ | required `src` + `title` exprs. **Origin-pinned**: an `<iframe>` is emitted only for an https `src` whose origin is an exact member of the host-supplied allowlist passed to `Render.view`; anything else self-hides or renders a placeholder. An always-on provenance bar is not suppressible from a manifest |
+| `Iframe`        | ⚠️ | required `src` + `title` exprs. **Origin-pinned**: an `<iframe>` is emitted only for an https `src` whose origin is an exact member of `Render.Options.allowedIframeOrigins`; anything else self-hides or renders a placeholder. An always-on provenance bar is not suppressible from a manifest |
 
 An **unknown component `type` fails the decode** (fail-closed). json-render's own renderer
 is fail-open here (warns + renders `null`); we are not.
 
-`FindingsTable` is accepted as a **deprecated wire-name alias for `GroupedTable`** (its name
-before 2.0.0), so a pre-2.0.0 manifest still decodes rather than being rejected wholesale.
+`GroupedTable` (the 2.x name) and `FindingsTable` (the name before 2.0.0) are both accepted as
+**deprecated wire-name aliases for `CountPills`**, so a manifest published against either still
+decodes rather than being rejected wholesale.
 
 ## Expression / binding forms
 
@@ -74,6 +75,15 @@ before 2.0.0), so a pre-2.0.0 manifest still decodes rather than being rejected 
   `aria-label`/`title` the renderer supplies per icon. Stock json-render's `Button` has no
   `icon`, so this is a deliberate divergence. Without `icon` the button is byte-for-byte
   unchanged. Contract fixture: `contract/fixtures/icon-button.json`.
+- **Disabled buttons.** `Button` takes an optional `disabled` expression. Truthy ⇒ the native
+  `disabled` attribute, a `jr-button--disabled` class, and **no press handler wired at all**;
+  the handler is the enforcement, the rest is presentation. Absent or falsy ⇒ unchanged. Stock
+  json-render's `Button` has no `disabled`, so this is a deliberate divergence.
+- **Empty-label buttons render nothing.** With no `icon`, a `Button` whose `label` resolves to
+  `""` emits no element. The catalog refuses element-level `visible`, so an empty label is the
+  only way a manifest can say "this action does not apply to this row"; emitting an invisible
+  `<button>` with a live handler on exactly those rows is the failure mode this closes. An
+  `icon` makes an empty label legitimate (icon-only), which is the one exception.
 - An `ActionBinding` accepts **only** `action`, `params`, `confirm`. Unsupported fields
   (`onSuccess`, `onError`, `preventDefault`) are **rejected at decode**, not silently
   dropped; declared follow-up/error behavior must fail closed, not vanish.
@@ -91,7 +101,7 @@ before 2.0.0), so a pre-2.0.0 manifest still decodes rather than being rejected 
 Elm decoders ignore unknown object keys by default; this renderer rejects them instead,
 so unsupported contract surface fails closed rather than rendering with silently-dropped
 semantics. Enforced via `rejectUnknownKeys` on: **element** (`type`/`props`/`children`/
-`on`/`repeat`), **props** (per-component allowlist, e.g. a stray `disabled` on a Button
+`on`/`repeat`), **props** (per-component allowlist, e.g. a stray `visible` on a Button
 fails), **action binding** (`action`/`params`/`confirm`), **confirm**, and **repeat**.
 
 **Optional fields fail closed too.** An optional field that is *present but malformed* is
@@ -108,7 +118,8 @@ rather than silently degrading to a button with no dialog or an element rendered
    the package.
 2. **Structural validation is built into the decoder** (missing root, dangling child key,
    `repeat` without children) rather than a separate opt-in `validateSpec` pass.
-3. **`GroupedTable` payload is intentionally loose**: the contract does not pin a row
-   schema, so the table groups rows by a string field and counts them.
+3. **`CountPills` payload is intentionally loose**: the contract does not pin a row
+   schema, so rows are grouped by a string field and counted. The words used to count
+   them come from the manifest or, failing that, from the host's `Render.Options`.
 4. **`SpecStream` / streaming JSON-Patch** (`data-spec` parts) is out of scope; we
    consume a complete flat `Spec`.

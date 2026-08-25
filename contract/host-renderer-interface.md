@@ -35,7 +35,7 @@ its model into the denormalized array the manifest reads, under these exact poin
 ```jsonc
 {
   "/selectAll": false,                          // bound by select-all checkbox ($bindState)
-  "/results":   null,                           // bound by GroupedTable ($state)
+  "/results":   null,                           // bound by CountPills ($state)
   "/instances": [
     {
       "id":        "<id>",                       // stable repeat key
@@ -51,6 +51,39 @@ its model into the denormalized array the manifest reads, under these exact poin
 The host is the single owner of this projection: on every change to its internal
 `selection`/`scan`/`selectAll` it re-emits the affected `instances[i]` (and `/selectAll`,
 `/results`). The renderer never derives these maps itself.
+
+### 1.3 Host options (what the host tells the renderer about ITSELF)
+
+Distinct from the manifest and from state: a small record of host-owned settings the renderer
+reads but a manifest can never reach. In the Elm renderer this is `Render.Options`, passed to
+`Render.view`; `Render.defaultOptions` is the empty-handed starting point.
+
+```elm
+{ allowedIframeOrigins : List String
+, countPills :
+    { groupBy : String
+    , groupOrder : List String
+    , itemNoun : String
+    , itemNounPlural : String
+    }
+}
+```
+
+- `allowedIframeOrigins` is the security boundary for `Iframe`: an `<iframe>` is emitted only
+  for an https `src` whose origin is an exact member. Empty disables all iframes. This must
+  never be reachable from a manifest.
+- `countPills` is vocabulary, not security: the words a `CountPills` element counts in when its
+  manifest does not name its own. It exists so a manifest published before those prop keys
+  existed keeps reading in the host's words with no wire change.
+
+### 1.4 Refusal classification (what the host shows when validation fails)
+
+The decoder's diagnostic is written for whoever is debugging the publisher. A host with a real
+audience classifies it instead of printing it: `Spec.errorKind` returns
+`UnknownCatalogSurface` when the manifest named a component type, prop key or icon this build
+does not have (the honest reading is version skew), and `Malformed` for everything else
+(nothing suggests a newer renderer would help). Both refuse to render; only the sentence
+differs.
 
 ## 2. Outputs (the action event)
 
@@ -150,7 +183,7 @@ host.setState(path, value)   // path = RFC 6901 JSON Pointer; value = new JSON
 - **Select-all**: `setState("/selectAll", true)` then fan out
   `setState("/instances/<i>/selected", true)` for each eligible row (the host owns the
   fan-out; json-render's select-all checkbox only two-way-binds `/selectAll`).
-- **Findings**: `setState("/results", <payload>)` re-renders the `GroupedTable`.
+- **Findings**: `setState("/results", <payload>)` re-renders the `CountPills`.
 
 **Reactivity caveat (both renderers must honor):** json-render's default store compares by
 reference (`===`, `state-store.ts`). To make a change register, the host MUST pass a **new

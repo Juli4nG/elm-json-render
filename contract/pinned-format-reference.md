@@ -11,6 +11,12 @@ MUST implement. It is the *format* we adopt, NOT json-render's renderer.
 **Fail-closed:** the json-render renderer is fail-OPEN by default (see §6);
 we validate against our catalog and refuse to mount on any error.
 
+This file pins the FORMAT. The Elm renderer's own catalog — which components exist, which props
+each takes, and where it deliberately diverges from stock json-render (`CountPills`, `Iframe`,
+pressable non-`Button` elements, `Button.icon`, `Button.disabled`) — is in
+[`../SUPPORT.md`](../SUPPORT.md). The host-facing side of that catalog (host options, refusal
+classification) is in [`host-renderer-interface.md`](host-renderer-interface.md).
+
 ---
 
 ## 1. Spec / manifest model — flat element map
@@ -253,10 +259,11 @@ drop unknowns; this package does not rely on it.
    "Scan selected" button). The literal empty array passes through fine; the **semantic**
    ("empty ⇒ use selection state") is **our host convention**, not json-render's. No source
    risk; host-owned.
-3. **`ProgressInline`/`GroupedTable`/`Badge` tone mapping** from a per-row `scanState`
-   string. json-render binds the string fine; mapping `running→spinner`, `error→danger` is
-   **component-internal** (our catalog component code), not wire-level. Renderers implement
-   identical tone maps.
+3. **`CountPills`/`Badge` tone mapping** from a per-row state string. json-render binds
+   the string fine; mapping `running→info`, `error→danger` is **component-internal** (our
+   catalog component code), not wire-level. Renderers implement identical tone maps. The Elm
+   renderer's table is exposed as `Render.badgeTone`, keyed on the leading whitespace-delimited
+   token minus a trailing ellipsis, so a host can reuse it rather than reimplement it.
 4. **Exact `confirm` object fields.** `ActionConfirm = { title, message, confirmLabel?,
    cancelLabel?, variant? }`. `variant` enum values not exhaustively pinned; we use
    `"default"`/`"danger"`. To check: `ActionConfirm` in `actions.ts`.
